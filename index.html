@@ -927,8 +927,16 @@
     let androidFolderHandle = null;
     let currentCalDate = new Date();
 
-    // --- SERVICE WORKER SKIFT-BANNER OCH RAST-KNAPP ---
+    // --- SERVICE WORKER REGISTRERING & SKIFT-BANNER ---
     if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').then(reg => {
+          console.log('Service Worker registrerad:', reg);
+        }).catch(err => {
+          console.error('Service Worker fel vid registrering:', err);
+        });
+      });
+
       navigator.serviceWorker.addEventListener('message', event => {
         if (event.data && event.data.type === 'TOGGLE_BREAK_ACTION') {
           toggleBreak();
@@ -1007,21 +1015,29 @@
     }
 
     function updateBackgroundNotification(title, body, isRunning, isBreak) {
-      if ('Notification' in window && Notification.permission === 'granted' && navigator.serviceWorker && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: 'UPDATE_SHIFT_NOTIFICATION',
-          title: title,
-          body: body,
-          isRunning: isRunning,
-          isBreak: isBreak
+      if ('Notification' in window && Notification.permission === 'granted' && navigator.serviceWorker) {
+        navigator.serviceWorker.ready.then(reg => {
+          if (reg.active) {
+            reg.active.postMessage({
+              type: 'UPDATE_SHIFT_NOTIFICATION',
+              title: title,
+              body: body,
+              isRunning: isRunning,
+              isBreak: isBreak
+            });
+          }
         });
       }
     }
 
     function clearBackgroundNotification() {
-      if ('Notification' in window && navigator.serviceWorker && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: 'CLEAR_NOTIFICATION'
+      if ('Notification' in window && navigator.serviceWorker) {
+        navigator.serviceWorker.ready.then(reg => {
+          if (reg.active) {
+            reg.active.postMessage({
+              type: 'CLEAR_NOTIFICATION'
+            });
+          }
         });
       }
     }
@@ -1361,13 +1377,11 @@
 
       const prevMonthLastDay = new Date(year, month, 0).getDate();
 
-      // Föregående månads dagar
       for (let i = startDayOfWeek - 1; i >= 0; i--) {
         const d = prevMonthLastDay - i;
         grid.innerHTML += `<div class="calendar-cell other-month"><span class="day-num">${d}</span></div>`;
       }
 
-      // Aktuell månads dagar
       const todayStr = new Date().toISOString().slice(0, 10);
       for (let d = 1; d <= lastDay.getDate(); d++) {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -1387,7 +1401,6 @@
               const bTxt = shift.breaks.map(b => `${b.start}-${b.end}`).join(', ');
               shiftContent += `<div class="shift-tag" style="background:#fef3c7; color:#92400e;">Rast: ${bTxt}</div>`;
             } else if (shift.breakStart && shift.breakEnd) {
-              // Bakåtkompatibilitet för äldre sparade enstaka raster
               shiftContent += `<div class="shift-tag" style="background:#fef3c7; color:#92400e;">Rast: ${shift.breakStart}-${shift.breakEnd}</div>`;
             }
             if (shift.note) {
@@ -1404,7 +1417,6 @@
         `;
       }
 
-      // Nästa månads fyllnadsdagar
       const totalCells = startDayOfWeek + lastDay.getDate();
       const nextMonthDays = (7 - (totalCells % 7)) % 7;
       for (let d = 1; d <= nextMonthDays; d++) {
@@ -1458,7 +1470,6 @@
       if (currentShift.breaks && Array.isArray(currentShift.breaks) && currentShift.breaks.length > 0) {
         currentShift.breaks.forEach(b => addModalBreakRow(b.start, b.end));
       } else if (currentShift.breakStart && currentShift.breakEnd) {
-        // Om det fanns en äldre enstaka rast
         addModalBreakRow(currentShift.breakStart, currentShift.breakEnd);
       }
 
@@ -2231,7 +2242,7 @@
       });
     }
 
-    // SAMMANSTÄLLNING MED MÅNADSTAK OCH ÖVERTID
+    // SAMMANSTÄLLNING MED MÅNADSTAK OCH UPPLEDA OB-KOLUMNER
     function buildMonthlySummaryMap(filteredEntries) {
       const customers = getCustomers();
       const summaryMap = {};
@@ -2244,6 +2255,7 @@
           summaryMap[custName] = { 
             customer: cust,
             totalHours: 0, 
+            obHours: 0,
             weekdayObHours: 0, 
             weekdayObCost: 0, 
             weekendObHours: 0, 
@@ -2255,7 +2267,8 @@
         const calc = calculateEntryCost(e, cust);
         summaryMap[custName].totalHours += calc.totalHours;
 
-        if (calc.obCost > 0) {
+        if (calc.obCost > 0 || calc.obHours > 0) {
+          summaryMap[custName].obHours += calc.obHours;
           if (calc.obTypeLabel === 'Helg-OB') {
             summaryMap[custName].weekendObHours += calc.obHours;
             summaryMap[custName].weekendObCost += calc.obCost;
@@ -2267,7 +2280,6 @@
         summaryMap[custName].rawCost += calc.cost;
       });
 
-      // BERÄKNA MÅNADSÖVERTID VID ÖVERSKRIDET MÅNADSTAK
       Object.keys(summaryMap).forEach(name => {
         const item = summaryMap[name];
         const cust = item.customer;
@@ -2339,18 +2351,17 @@
       const summaryMap = buildMonthlySummaryMap(filtered);
 
       const summaryData = [
-        ["Kund", "Total tid (h)", "Ordinarie tid (h)", "Månadsövertid (h)", "Övertidstillägg (kr)", "Vardags-OB (kr)", "Helg-OB (kr)", "Slutsumma (kr)"]
+        ["Kund", "Total tid (h)", "OB-tid (h)", "OB (kr)", "OB1 / Helg-OB (kr)", "Övertidstillägg (kr)", "Total summa (kr)"]
       ];
       Object.keys(summaryMap).forEach(name => {
         const s = summaryMap[name];
         summaryData.push([
           name,
           Number(s.totalHours.toFixed(2)),
-          Number(s.regularHours.toFixed(2)),
-          Number(s.otHours.toFixed(2)),
-          Math.round(s.otAddonCost),
+          Number(s.obHours.toFixed(2)),
           Math.round(s.weekdayObCost),
           Math.round(s.weekendObCost),
+          Math.round(s.otAddonCost),
           Math.round(s.finalTotalCost)
         ]);
       });
@@ -2378,14 +2389,14 @@
         csv += `${e.date || ''};"${cust ? cust.name : 'Okänd'}";${e.startTime || ''};${e.endTime || ''};"${breaksStr}";${calc.breakMin};${calc.totalHours};${cust ? cust.hourly_rate : 0};"${calc.obTypeLabel || ''}";${calc.obHours};${calc.obCost};"${e.desc || ''}";${calc.cost}\n`;
       });
 
-      csv += "\nMÅNADSSAMMANSTÄLLNING PER KUND (MED MÅNADSÖVERTID)\n";
-      csv += "Kund;Total tid (h);Ordinarie tid (h);Månadsövertid (h);Övertidstillägg (kr);Vardags-OB (kr);Helg-OB (kr);Slutsumma (kr)\n";
+      csv += "\nMÅNADSSAMMANSTÄLLNING PER KUND\n";
+      csv += "Kund;Total tid (h);OB-tid (h);OB (kr);OB1 / Helg-OB (kr);Övertidstillägg (kr);Total summa (kr)\n";
 
       const summaryMap = buildMonthlySummaryMap(filtered);
 
       Object.keys(summaryMap).forEach(name => {
         const s = summaryMap[name];
-        csv += `"${name}";${Number(s.totalHours.toFixed(2))};${Number(s.regularHours.toFixed(2))};${Number(s.otHours.toFixed(2))};${Math.round(s.otAddonCost)};${Math.round(s.weekdayObCost)};${Math.round(s.weekendObCost)};${Math.round(s.finalTotalCost)}\n`;
+        csv += `"${name}";${Number(s.totalHours.toFixed(2))};${Number(s.obHours.toFixed(2))};${Math.round(s.weekdayObCost)};${Math.round(s.weekendObCost)};${Math.round(s.otAddonCost)};${Math.round(s.finalTotalCost)}\n`;
       });
 
       await saveOrShareFile(csv, `tidsrapport_${new Date().toISOString().slice(0,10)}.csv`, 'text/csv;charset=utf-8;');
@@ -2464,7 +2475,6 @@
           document.getElementById('field-ob-weekend-type').value = cust.ob_weekend_rate_type || 'multiplier';
           document.getElementById('field-ob-weekend-value').value = cust.ob_weekend_rate_value || 2.0;
 
-          // Övertidsfält per kund
           document.getElementById('field-ot-enabled').checked = cust.ot_enabled || false;
           document.getElementById('field-ot-monthly-cap').value = cust.ot_monthly_cap || 160;
           document.getElementById('field-ot-rate-type').value = cust.ot_rate_type || 'multiplier';
@@ -2550,7 +2560,6 @@
         ob_weekend_rate_type: document.getElementById('field-ob-weekend-type').value,
         ob_weekend_rate_value: parseFloat(document.getElementById('field-ob-weekend-value').value) || 1.0,
         
-        // Övertidsinställningar sparade per kund med Månadstak
         ot_enabled: document.getElementById('field-ot-enabled').checked,
         ot_monthly_cap: parseFloat(document.getElementById('field-ot-monthly-cap').value) || 160,
         ot_rate_type: document.getElementById('field-ot-rate-type').value,
