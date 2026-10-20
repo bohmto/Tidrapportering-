@@ -243,7 +243,7 @@
       padding-bottom: 4px;
     }
 
-    /* BOTTENNAVIGERING MED TYDLIG MARKERING AV AKTIV FLIK */
+    /* BOTTENNAVIGERING */
     .bottom-nav {
       position: fixed;
       bottom: 0; left: 0; right: 0;
@@ -309,7 +309,7 @@
     .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
     .hidden-input { display: none; }
 
-    /* KALENDER DESIGN - MED RASTVISNING */
+    /* KALENDER DESIGN */
     .calendar-header {
       display: flex;
       justify-content: space-between;
@@ -392,7 +392,7 @@
 </head>
 <body>
 
-  <!-- FAST STATUSRAD HÖGST UPP MED AKTIV FLIK-INDIKATOR -->
+  <!-- FAST STATUSRAD HÖGST UPP -->
   <div id="top-status-bar" class="top-status-bar">
     <span id="top-status-text">⏹ Ingen tidtagning igång</span>
     <span id="top-tab-badge" class="active-tab-badge">Tid</span>
@@ -910,7 +910,7 @@
     </form>
   </dialog>
 
-  <!-- NAVIGERINGSBARR MED INDIKATOR FÖR AKTIV FLIK -->
+  <!-- NAVIGERINGSBARR -->
   <nav class="bottom-nav">
     <button class="nav-item active" id="nav-time" onclick="switchTab('time')">
       <span class="nav-icon">⏱️</span>
@@ -1013,7 +1013,6 @@
       }
     }
 
-    // --- FLIKBYTE & VIST STATUSTEXT ---
     function switchTab(tab) {
       document.querySelectorAll('.tab-view').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.bottom-nav .nav-item').forEach(el => el.classList.remove('active'));
@@ -1027,7 +1026,6 @@
       }
     }
 
-    // --- SERVICE WORKER REGISTRERING & SKIFT-BANNER ---
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js').then(reg => {
@@ -1044,7 +1042,6 @@
       });
     }
 
-    // --- RASTTIDER I FORMULÄR ---
     function addBreakRow(start = '', end = '') {
       const container = document.getElementById('break-rows-container');
       const rowId = 'break_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
@@ -1107,7 +1104,6 @@
       return breakRows;
     }
 
-    // --- BAKGRUNDSNOTISER MED RAST-KNAPP VIA SERVICE WORKER ---
     async function requestNotificationPermission() {
       if ('Notification' in window && Notification.permission === 'default') {
         await Notification.requestPermission();
@@ -1142,7 +1138,6 @@
       }
     }
 
-    // --- SYNKRONISERING & BACKUP ---
     function updateSyncVisibility() {
       const method = document.getElementById('syncMethod').value;
       const group = document.getElementById('serverSettingsGroup');
@@ -1408,7 +1403,6 @@
       }
     }
 
-    // --- SCHEMA & KALENDERFUNKTIONER MED RASTVISNING ---
     function getScheduleInfo() {
       const stored = localStorage.getItem(STORAGE_SCHEDULE_INFO);
       if (stored) return JSON.parse(stored);
@@ -1532,7 +1526,6 @@
           } else {
             const label = shift.displayLabel || (shift.note ? shift.note.split(' - ')[0] : 'Pass');
             
-            // Format RAST för visning i kalenderrutan
             let breakText = '';
             if (shift.breaks && shift.breaks.length > 0) {
               const b = shift.breaks[0];
@@ -1699,7 +1692,6 @@
       renderScheduleCalendar();
     }
 
-    // --- ICS / ICALENDAR IMPORT ---
     function importIcsCalendar(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -2506,7 +2498,7 @@
       filtered.forEach(e => {
         const cust = customers.find(c => c.id === e.customerId);
         const calc = calculateEntryCost(e, cust);
-        const breaksStr = e.breaks && e.breaks.length > 0 ? e.breaks.map(b => `${b.start}-${b.end}`).join(', ') : '-';
+        const breaksStr = e.breaks && e.breaks.length > 0 ? e.breaks.map(b => `${b.start || '??'}–${b.end || '??'}`).join(', ') : '-';
         sheetData.push([
           e.date || '',
           cust ? cust.name : 'Okänd',
@@ -2561,7 +2553,7 @@
       filtered.forEach(e => {
         const cust = customers.find(c => c.id === e.customerId);
         const calc = calculateEntryCost(e, cust);
-        const breaksStr = e.breaks && e.breaks.length > 0 ? e.breaks.map(b => `${b.start}-${b.end}`).join(', ') : '';
+        const breaksStr = e.breaks && e.breaks.length > 0 ? e.breaks.map(b => `${b.start || '??'}–${b.end || '??'}`).join(', ') : '';
         csv += `${e.date || ''};"${cust ? cust.name : 'Okänd'}";${e.startTime || ''};${e.endTime || ''};"${breaksStr}";${calc.breakMin};${calc.totalHours};${cust ? cust.hourly_rate : 0};"${calc.obTypeLabel || ''}";${calc.obHours};${calc.obCost};"${e.desc || ''}";${calc.cost}\n`;
       });
 
