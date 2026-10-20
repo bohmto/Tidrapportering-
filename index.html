@@ -598,6 +598,24 @@
       <h1>Användare & Schema</h1>
     </div>
 
+    <!-- ANVÄNDARPROFILER (VÄXLA / LÄGG TILL) -->
+    <div class="card" style="background: #e0f2fe; border: 1px solid #bae6fd;">
+      <h2 style="margin-bottom: 8px; font-size: 16px; color: #0369a1;">👤 Aktiva Profiler (Flera användare)</h2>
+      <p style="font-size: 12px; color: #0369a1; margin-bottom: 12px;">
+        Välj vilken användare som är aktiv på enheten, eller skapa en ny profil.
+      </p>
+      
+      <div class="form-row" style="align-items: center; margin-bottom: 10px;">
+        <div class="form-group" style="margin-bottom:0; flex:2;">
+          <label for="profile-select" style="font-size: 12px;">Aktiv användare</label>
+          <select id="profile-select" onchange="switchUserProfile(this.value)" style="padding: 10px; font-size: 15px;"></select>
+        </div>
+        <div style="display: flex; align-items: flex-end; padding-top: 20px;">
+          <button type="button" class="btn btn-primary btn-sm" onclick="promptNewUserProfile()">+ Ny</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ANVÄNDARENS UPPGIFTER -->
     <div class="card">
       <h2 style="margin-bottom: 12px;">Användarens Uppgifter</h2>
@@ -927,11 +945,11 @@
   </nav>
 
   <script>
-    const STORAGE_CUSTOMERS = 'app_customers_v5';
-    const STORAGE_ENTRIES = 'app_time_entries_v5';
-    const STORAGE_ACTIVE_SHIFT = 'app_active_shift_v5';
-    const STORAGE_CLIENT_INFO = 'app_client_info_v5';
-    const STORAGE_SCHEDULE_INFO = 'app_schedule_info_v5';
+    let activeProfileId = localStorage.getItem('app_active_profile_id') || 'default_user';
+
+    function getStorageKey(base) {
+      return `${base}_${activeProfileId}`;
+    }
 
     const TAB_NAMES = {
       'time': 'Tid',
@@ -1040,6 +1058,93 @@
           toggleBreak();
         }
       });
+    }
+
+    // --- FLERA ANVÄNDARE / PROFILER ---
+    function getAllProfiles() {
+      const stored = localStorage.getItem('app_user_profiles_list');
+      if (stored) return JSON.parse(stored);
+      return [
+        { id: 'default_user', name: 'Standardanvändare' }
+      ];
+    }
+
+    function saveAllProfiles(profiles) {
+      localStorage.setItem('app_user_profiles_list', JSON.stringify(profiles));
+    }
+
+    function renderProfileDropdown() {
+      const select = document.getElementById('profile-select');
+      if (!select) return;
+      const profiles = getAllProfiles();
+      select.innerHTML = '';
+      profiles.forEach(p => {
+        select.innerHTML += `<option value="${p.id}" ${p.id === activeProfileId ? 'selected' : ''}>${p.name}</option>`;
+      });
+    }
+
+    function switchUserProfile(profileId) {
+      activeProfileId = profileId;
+      localStorage.setItem('app_active_profile_id', activeProfileId);
+      
+      renderProfileDropdown();
+      populateCustomerDropdowns();
+      renderCustomerList();
+      renderTimeEntries();
+      loadClientInfoUI();
+      loadScheduleInfoUI();
+      calculateRequiredRest();
+      updateTimerUI();
+      migrateOldEntries();
+    }
+
+    function promptNewUserProfile() {
+      const name = prompt("Ange namn på den nya användaren:");
+      if (!name || !name.trim()) return;
+
+      const profileId = 'user_' + Date.now();
+      let profiles = getAllProfiles();
+      profiles.push({ id: profileId, name: name.trim() });
+      saveAllProfiles(profiles);
+
+      // Växla direkt till den nya profilen och uppdatera rutan i gränssnittet
+      switchUserProfile(profileId);
+
+      // Sätt även användarens namn i klientuppgifter
+      const client = getClientInfo();
+      client.name = name.trim();
+      localStorage.setItem(getStorageKey('app_client_info_v5'), JSON.stringify(client));
+      loadClientInfoUI();
+
+      alert(`Användare "${name.trim()}" skapad och aktiverad!`);
+    }
+
+    // --- MIGRERING AV GAMLA RASTER ---
+    function addMinutesToTime(timeStr, mins) {
+      const [h, m] = timeStr.split(':').map(Number);
+      let totalMins = h * 60 + m + mins;
+      let newH = Math.floor(totalMins / 60) % 24;
+      let newM = totalMins % 60;
+      return String(newH).padStart(2, '0') + ':' + String(newM).padStart(2, '0');
+    }
+
+    function migrateOldEntries() {
+      let entries = getTimeEntries();
+      let updated = false;
+
+      entries.forEach(entry => {
+        if (entry.breakMin && (!entry.breaks || entry.breaks.length === 0)) {
+          entry.breaks = [{
+            start: "12:00",
+            end: addMinutesToTime("12:00", entry.breakMin)
+          }];
+          updated = true;
+        }
+      });
+
+      if (updated) {
+        localStorage.setItem(getStorageKey('app_time_entries_v5'), JSON.stringify(entries));
+      }
     }
 
     function addBreakRow(start = '', end = '') {
@@ -1195,7 +1300,7 @@
         if (androidFolderHandle) {
           try {
             const dateStr = new Date().toISOString().slice(0, 10);
-            const filename = `autobackup_tidrapportering_${dateStr}.json`;
+            const filename = `autobackup_${activeProfileId}_${dateStr}.json`;
             const fileHandle = await androidFolderHandle.getFileHandle(filename, { create: true });
             const writable = await fileHandle.createWritable();
             await writable.write(JSON.stringify(data, null, 2));
@@ -1233,7 +1338,8 @@
 
     async function runAutoBackup() {
       const backupObj = {
-        version: "5.10",
+        version: "5.12",
+        profileId: activeProfileId,
         exportDate: new Date().toISOString(),
         customers: getCustomers(),
         entries: getTimeEntries(),
@@ -1245,7 +1351,8 @@
 
     async function triggerManualSync() {
       const backupObj = {
-        version: "5.10",
+        version: "5.12",
+        profileId: activeProfileId,
         exportDate: new Date().toISOString(),
         customers: getCustomers(),
         entries: getTimeEntries(),
@@ -1370,7 +1477,7 @@
     }
 
     function getClientInfo() {
-      const stored = localStorage.getItem(STORAGE_CLIENT_INFO);
+      const stored = localStorage.getItem(getStorageKey('app_client_info_v5'));
       return stored ? JSON.parse(stored) : { name: '', email: '', phone: '', address: '' };
     }
 
@@ -1382,7 +1489,7 @@
         phone: document.getElementById('client-phone').value.trim(),
         address: document.getElementById('client-address').value.trim()
       };
-      localStorage.setItem(STORAGE_CLIENT_INFO, JSON.stringify(client));
+      localStorage.setItem(getStorageKey('app_client_info_v5'), JSON.stringify(client));
       alert("Användarens uppgifter har sparats!");
       runAutoBackup();
     }
@@ -1404,7 +1511,7 @@
     }
 
     function getScheduleInfo() {
-      const stored = localStorage.getItem(STORAGE_SCHEDULE_INFO);
+      const stored = localStorage.getItem(getStorageKey('app_schedule_info_v5'));
       if (stored) return JSON.parse(stored);
       
       return {
@@ -1419,7 +1526,7 @@
       const showToggle = document.getElementById('enable-show-worked-time');
       if (showToggle) {
         sched.showWorkedTime = showToggle.checked;
-        localStorage.setItem(STORAGE_SCHEDULE_INFO, JSON.stringify(sched));
+        localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
         renderScheduleCalendar();
       }
     }
@@ -1447,7 +1554,7 @@
         off: false
       };
 
-      localStorage.setItem(STORAGE_SCHEDULE_INFO, JSON.stringify(sched));
+      localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
       renderScheduleCalendar();
     }
 
@@ -1670,7 +1777,7 @@
 
       sched.calendarShifts[dateStr] = { start, end, breaks: breakRows, breakMin: totalBreakMins, note, off: isOff };
 
-      localStorage.setItem(STORAGE_SCHEDULE_INFO, JSON.stringify(sched));
+      localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
       closeScheduleDayModal();
       renderScheduleCalendar();
       runAutoBackup();
@@ -1724,7 +1831,7 @@
           }
         });
 
-        localStorage.setItem(STORAGE_SCHEDULE_INFO, JSON.stringify(sched));
+        localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
         renderScheduleCalendar();
         runAutoBackup();
         alert(`Lyckades importera ${importedCount} skift till kalendern!`);
@@ -1857,7 +1964,7 @@
     }
 
     function getCustomers() {
-      const stored = localStorage.getItem(STORAGE_CUSTOMERS);
+      const stored = localStorage.getItem(getStorageKey('app_customers_v5'));
       if (!stored) {
         saveCustomers(DEFAULT_CUSTOMERS);
         return DEFAULT_CUSTOMERS;
@@ -1866,7 +1973,7 @@
     }
 
     function saveCustomers(data) {
-      localStorage.setItem(STORAGE_CUSTOMERS, JSON.stringify(data));
+      localStorage.setItem(getStorageKey('app_customers_v5'), JSON.stringify(data));
       populateCustomerDropdowns();
       renderCustomerList();
       renderTimeEntries();
@@ -1874,12 +1981,12 @@
     }
 
     function getTimeEntries() {
-      const stored = localStorage.getItem(STORAGE_ENTRIES);
+      const stored = localStorage.getItem(getStorageKey('app_time_entries_v5'));
       return stored ? JSON.parse(stored) : [];
     }
 
     function saveTimeEntries(data) {
-      localStorage.setItem(STORAGE_ENTRIES, JSON.stringify(data));
+      localStorage.setItem(getStorageKey('app_time_entries_v5'), JSON.stringify(data));
       renderTimeEntries();
       calculateRequiredRest();
       renderScheduleCalendar();
@@ -1892,8 +1999,8 @@
     }
 
     function clearAllEntries() {
-      if (confirm("Vill du rensa alla sparade pass permanent?")) {
-        localStorage.removeItem(STORAGE_ENTRIES);
+      if (confirm("Vill du rensa alla sparade pass permanent för denna användare?")) {
+        localStorage.removeItem(getStorageKey('app_time_entries_v5'));
         renderTimeEntries();
         calculateRequiredRest();
         renderScheduleCalendar();
@@ -1903,15 +2010,15 @@
     }
 
     function getActiveShift() {
-      const stored = localStorage.getItem(STORAGE_ACTIVE_SHIFT);
+      const stored = localStorage.getItem(getStorageKey('app_active_shift_v5'));
       return stored ? JSON.parse(stored) : null;
     }
 
     function setActiveShift(shift) {
       if (shift) {
-        localStorage.setItem(STORAGE_ACTIVE_SHIFT, JSON.stringify(shift));
+        localStorage.setItem(getStorageKey('app_active_shift_v5'), JSON.stringify(shift));
       } else {
-        localStorage.removeItem(STORAGE_ACTIVE_SHIFT);
+        localStorage.removeItem(getStorageKey('app_active_shift_v5'));
         alarmStateMap = {};
         clearBackgroundNotification();
       }
@@ -2541,7 +2648,7 @@
       XLSX.utils.book_append_sheet(wb, ws2, "Månadssammanställning");
 
       const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      await saveOrShareFile(excelBuffer, `tidsrapport_${new Date().toISOString().slice(0,10)}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      await saveOrShareFile(excelBuffer, `tidsrapport_${activeProfileId}_${new Date().toISOString().slice(0,10)}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     }
 
     async function exportCSV() {
@@ -2567,12 +2674,12 @@
         csv += `"${name}";${Number(s.totalHours.toFixed(2))};${Number(s.obHours.toFixed(2))};${Math.round(s.weekdayObCost)};${Math.round(s.weekendObCost)};${Math.round(s.otAddonCost)};${Math.round(s.finalTotalCost)}\n`;
       });
 
-      await saveOrShareFile(csv, `tidsrapport_${new Date().toISOString().slice(0,10)}.csv`, 'text/csv;charset=utf-8;');
+      await saveOrShareFile(csv, `tidsrapport_${activeProfileId}_${new Date().toISOString().slice(0,10)}.csv`, 'text/csv;charset=utf-8;');
     }
 
     async function exportData() {
-      const backupObj = { version: "5.10", customers: getCustomers(), entries: getTimeEntries(), client: getClientInfo(), schedule: getScheduleInfo() };
-      await saveOrShareFile(JSON.stringify(backupObj, null, 2), `backup.json`, 'application/json');
+      const backupObj = { version: "5.12", profileId: activeProfileId, customers: getCustomers(), entries: getTimeEntries(), client: getClientInfo(), schedule: getScheduleInfo() };
+      await saveOrShareFile(JSON.stringify(backupObj, null, 2), `backup_${activeProfileId}.json`, 'application/json');
     }
 
     function importData(event) {
@@ -2582,13 +2689,16 @@
       reader.onload = function(e) {
         const data = JSON.parse(e.target.result);
         if (data.customers) saveCustomers(data.customers);
-        if (data.entries) saveTimeEntries(data.entries);
+        if (data.entries) {
+          saveTimeEntries(data.entries);
+          migrateOldEntries();
+        }
         if (data.client) {
-          localStorage.setItem(STORAGE_CLIENT_INFO, JSON.stringify(data.client));
+          localStorage.setItem(getStorageKey('app_client_info_v5'), JSON.stringify(data.client));
           loadClientInfoUI();
         }
         if (data.schedule) {
-          localStorage.setItem(STORAGE_SCHEDULE_INFO, JSON.stringify(data.schedule));
+          localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(data.schedule));
           loadScheduleInfoUI();
         }
         alert('Återställningen lyckades!');
@@ -2757,6 +2867,8 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+      renderProfileDropdown();
+      migrateOldEntries();
       document.getElementById('time-date').valueAsDate = new Date();
       populateCustomerDropdowns();
       renderCustomerList();
