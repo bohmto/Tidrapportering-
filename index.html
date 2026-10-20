@@ -278,7 +278,7 @@
     .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
     .hidden-input { display: none; }
 
-    /* KALENDER DESIGN */
+    /* KALENDER DESIGN - OPTIMERAD FÖR MOBIL */
     .calendar-header {
       display: flex;
       justify-content: space-between;
@@ -288,27 +288,29 @@
     .calendar-grid {
       display: grid;
       grid-template-columns: repeat(7, 1fr);
-      gap: 4px;
+      gap: 3px;
       text-align: center;
     }
     .calendar-day-head {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
       color: var(--text-muted);
       padding: 4px 0;
     }
     .calendar-cell {
-      min-height: 64px;
+      min-height: 52px;
+      max-height: 52px;
       background: #f8fafc;
       border: 1px solid var(--border);
       border-radius: 6px;
-      padding: 4px;
+      padding: 2px;
       font-size: 11px;
       cursor: pointer;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: flex-start;
+      overflow: hidden;
       transition: background 0.15s ease;
     }
     .calendar-cell:hover {
@@ -322,27 +324,15 @@
       font-weight: bold;
     }
     .calendar-cell .day-num {
-      font-size: 11px;
-      margin-bottom: 2px;
+      font-size: 10px;
+      margin-bottom: 1px;
     }
     .calendar-cell .shift-tag {
       background: #dbeafe;
       color: #1e40af;
       font-size: 9px;
-      border-radius: 4px;
-      padding: 2px 3px;
-      width: 100%;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      margin-top: 1px;
-    }
-    .calendar-cell .note-tag {
-      background: #fef3c7;
-      color: #92400e;
-      font-size: 8px;
-      border-radius: 4px;
-      padding: 1px 3px;
+      border-radius: 3px;
+      padding: 1px 2px;
       width: 100%;
       white-space: nowrap;
       overflow: hidden;
@@ -611,7 +601,7 @@
       </div>
 
       <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
-        Klicka på valfri dag i kalendern för att ändra arbetstid, raster eller anteckning.
+        Klicka på valfri dag i kalendern för att se och redigera tider, raster eller anteckningar.
       </p>
 
       <div id="schedule-controls-container">
@@ -1449,7 +1439,7 @@
       const year = currentCalDate.getFullYear();
       const month = currentCalDate.getMonth();
 
-      const monthNames = ["Januari", "Februari", "Mars", "April", "Maj", "Juni", "Juli", "Augusti", "September", "Oktober", "November", "December"];
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "Maj", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"];
       title.innerText = `${monthNames[month]} ${year}`;
 
       grid.innerHTML = '';
@@ -1463,7 +1453,7 @@
       const lastDay = new Date(year, month + 1, 0);
 
       let startDayOfWeek = firstDay.getDay() - 1;
-      if (startDayOfWeek === -1) startDayOfWeek, startDayOfWeek = 6;
+      if (startDayOfWeek === -1) startDayOfWeek = 6;
 
       const prevMonthLastDay = new Date(year, month, 0).getDate();
 
@@ -1477,7 +1467,6 @@
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
         const isToday = dateStr === todayStr;
 
-        // Om "Visa sparad tid" är aktivt, kolla om det finns sparade pass för dagen, annars använd schema
         let shift = shifts[dateStr];
         if (showWorked) {
           const entryForDay = entries.find(e => e.date === dateStr);
@@ -1486,11 +1475,12 @@
             const cust = customers.find(c => c.id === entryForDay.customerId);
             const custName = cust ? cust.name : 'Pass';
             shift = {
-              start: entryForDay.startTime || '08:00',
-              end: entryForDay.endTime || '17:00',
+              start: entryForDay.startTime || '',
+              end: entryForDay.endTime || '',
               breaks: entryForDay.breaks || [],
               note: `${custName}${entryForDay.desc ? ' - ' + entryForDay.desc : ''}`,
-              off: false
+              off: false,
+              displayLabel: custName
             };
           }
         }
@@ -1503,16 +1493,9 @@
             shiftContent = `<div class="shift-tag">Ledig</div>`;
             offClass = ' off-day';
           } else {
-            shiftContent = `<div class="shift-tag">${shift.start}-${shift.end}</div>`;
-            if (shift.breaks && shift.breaks.length > 0) {
-              const bTxt = shift.breaks.map(b => `${b.start}-${b.end}`).join(', ');
-              shiftContent += `<div class="shift-tag" style="background:#fef3c7; color:#92400e;">Rast: ${bTxt}</div>`;
-            } else if (shift.breakStart && shift.breakEnd) {
-              shiftContent += `<div class="shift-tag" style="background:#fef3c7; color:#92400e;">Rast: ${shift.breakStart}-${shift.breakEnd}</div>`;
-            }
-            if (shift.note) {
-              shiftContent += `<div class="note-tag" title="${shift.note}">📝 ${shift.note}</div>`;
-            }
+            // Endast kundnamn syns i rutan för att hålla kalendern kompakt
+            const label = shift.displayLabel || (shift.note ? shift.note.split(' - ')[0] : 'Pass');
+            shiftContent = `<div class="shift-tag" title="${label}">${label}</div>`;
           }
         }
 
@@ -1560,9 +1543,29 @@
     function openScheduleDayModal(dateStr) {
       const modal = document.getElementById('schedule-day-modal');
       const title = document.getElementById('schedule-modal-date-title');
+      
       const sched = getScheduleInfo();
       const shifts = sched.calendarShifts || {};
-      const currentShift = shifts[dateStr] || { start: '07:00', end: '16:00', breaks: [], note: '', off: false };
+      const entries = getTimeEntries();
+      
+      // Kolla om det finns ett sparat pass för dagen, annars schema
+      const entryForDay = entries.find(e => e.date === dateStr);
+      let currentShift = shifts[dateStr];
+
+      if (entryForDay) {
+        const customers = getCustomers();
+        const cust = customers.find(c => c.id === entryForDay.customerId);
+        const custName = cust ? cust.name : 'Pass';
+        currentShift = {
+          start: entryForDay.startTime || '07:00',
+          end: entryForDay.endTime || '16:00',
+          breaks: entryForDay.breaks || [],
+          note: `${custName}${entryForDay.desc ? ' - ' + entryForDay.desc : ''}`,
+          off: false
+        };
+      } else if (!currentShift) {
+        currentShift = { start: '07:00', end: '16:00', breaks: [], note: '', off: false };
+      }
 
       document.getElementById('modal-sched-date').value = dateStr;
       title.innerText = `Skift ${dateStr}`;
@@ -2680,7 +2683,7 @@
         ob_weekend_start_time: document.getElementById('field-ob-weekend-start').value,
         ob_weekend_end_time: document.getElementById('field-ob-weekend-end').value,
         ob_weekend_rate_type: document.getElementById('field-ob-weekend-type').value,
-        ob_weekend_rate_value: parseFloat(document.getElementById('field-ob-weekend-value').value) || 1.0,
+        ob_weekend_rate_value: parseFloat(document.getElementById('field-ob-weekend-value').value) === 0 ? 0 : (parseFloat(document.getElementById('field-ob-weekend-value').value) || 1.0),
         
         ot_enabled: document.getElementById('field-ot-enabled').checked,
         ot_monthly_cap: parseFloat(document.getElementById('field-ot-monthly-cap').value) || 160,
