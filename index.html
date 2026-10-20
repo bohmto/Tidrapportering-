@@ -598,6 +598,18 @@
         </label>
       </div>
 
+      <!-- DÖLJ/VISA SPARAD TID I KALENDER -->
+      <div style="display: flex; justify-content: space-between; align-items: center; background: #f1f5f9; padding: 10px 12px; border-radius: 8px; margin-bottom: 12px;">
+        <div>
+          <label for="enable-show-worked-time" style="margin: 0; font-size: 13px;">Visa sparad tid i kalendern</label>
+          <span style="font-size: 11px; color: var(--text-muted);">Slå av för att dölja sparade pass i vyn</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="enable-show-worked-time" checked onchange="saveScheduleSettingsUI()">
+          <span class="slider"></span>
+        </label>
+      </div>
+
       <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
         Klicka på valfri dag i kalendern för att ändra arbetstid, raster eller anteckning.
       </p>
@@ -926,6 +938,38 @@
     let alarmStateMap = {};
     let androidFolderHandle = null;
     let currentCalDate = new Date();
+
+    // --- FLIK-SVEPNING (SWIPE) ---
+    const tabsList = ['time', 'customers', 'client'];
+    let touchStartX = 0;
+    let touchEndX = 0;
+
+    document.addEventListener('touchstart', e => {
+      touchStartX = e.changedTouches[0].screenX;
+    }, false);
+
+    document.addEventListener('touchend', e => {
+      touchEndX = e.changedTouches[0].screenX;
+      handleSwipeGesture();
+    }, false);
+
+    function handleSwipeGesture() {
+      const swipeThreshold = 60;
+      if (touchEndX < touchStartX - swipeThreshold) {
+        let currentActive = tabsList.find(t => document.getElementById(`tab-${t}`).classList.contains('active'));
+        let currentIndex = tabsList.indexOf(currentActive);
+        if (currentIndex < tabsList.length - 1) {
+          switchTab(tabsList[currentIndex + 1]);
+        }
+      }
+      if (touchEndX > touchStartX + swipeThreshold) {
+        let currentActive = tabsList.find(t => document.getElementById(`tab-${t}`).classList.contains('active'));
+        let currentIndex = tabsList.indexOf(currentActive);
+        if (currentIndex > 0) {
+          switchTab(tabsList[currentIndex - 1]);
+        }
+      }
+    }
 
     // --- SERVICE WORKER REGISTRERING & SKIFT-BANNER ---
     if ('serviceWorker' in navigator) {
@@ -1344,8 +1388,46 @@
       
       return {
         enabled: true,
+        showWorkedTime: true,
         calendarShifts: {}
       };
+    }
+
+    function saveScheduleSettingsUI() {
+      const sched = getScheduleInfo();
+      const showToggle = document.getElementById('enable-show-worked-time');
+      if (showToggle) {
+        sched.showWorkedTime = showToggle.checked;
+        localStorage.setItem(STORAGE_SCHEDULE_INFO, JSON.stringify(sched));
+        renderScheduleCalendar();
+      }
+    }
+
+    // ARBETAD TID LÄGGSS ALLTID TILL AUTOMATISKT I KALENDERN
+    function autoSaveEntryToCalendar(entry) {
+      const sched = getScheduleInfo();
+      if (!sched.calendarShifts) sched.calendarShifts = {};
+      const dateStr = entry.date;
+      if (!dateStr) return;
+
+      const customers = getCustomers();
+      const cust = customers.find(c => c.id === entry.customerId);
+      const custName = cust ? cust.name : 'Pass';
+
+      const start = entry.startTime || '08:00';
+      const end = entry.endTime || '17:00';
+      const breaks = entry.breaks || (entry.breakMin ? [{ start: '12:00', end: `12:${String(entry.breakMin).padStart(2, '0')}` }] : []);
+
+      sched.calendarShifts[dateStr] = {
+        start: start,
+        end: end,
+        breaks: breaks,
+        note: `${custName}${entry.desc ? ' - ' + entry.desc : ''}`,
+        off: false
+      };
+
+      localStorage.setItem(STORAGE_SCHEDULE_INFO, JSON.stringify(sched));
+      renderScheduleCalendar();
     }
 
     function renderScheduleCalendar() {
@@ -1354,7 +1436,15 @@
       if (!grid || !title) return;
 
       const sched = getScheduleInfo();
+      const showWorked = sched.showWorkedTime !== false;
       const shifts = sched.calendarShifts || {};
+      const entries = getTimeEntries();
+
+      // Synka toggle i UI
+      const showToggle = document.getElementById('enable-show-worked-time');
+      if (showToggle) {
+        showToggle.checked = showWorked;
+      }
 
       const year = currentCalDate.getFullYear();
       const month = currentCalDate.getMonth();
@@ -1373,7 +1463,7 @@
       const lastDay = new Date(year, month + 1, 0);
 
       let startDayOfWeek = firstDay.getDay() - 1;
-      if (startDayOfWeek === -1) startDayOfWeek = 6;
+      if (startDayOfWeek === -1) startDayOfWeek, startDayOfWeek = 6;
 
       const prevMonthLastDay = new Date(year, month, 0).getDate();
 
@@ -1386,7 +1476,24 @@
       for (let d = 1; d <= lastDay.getDate(); d++) {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
         const isToday = dateStr === todayStr;
-        const shift = shifts[dateStr];
+
+        // Om "Visa sparad tid" är aktivt, kolla om det finns sparade pass för dagen, annars använd schema
+        let shift = shifts[dateStr];
+        if (showWorked) {
+          const entryForDay = entries.find(e => e.date === dateStr);
+          if (entryForDay) {
+            const customers = getCustomers();
+            const cust = customers.find(c => c.id === entryForDay.customerId);
+            const custName = cust ? cust.name : 'Pass';
+            shift = {
+              start: entryForDay.startTime || '08:00',
+              end: entryForDay.endTime || '17:00',
+              breaks: entryForDay.breaks || [],
+              note: `${custName}${entryForDay.desc ? ' - ' + entryForDay.desc : ''}`,
+              off: false
+            };
+          }
+        }
 
         let shiftContent = '';
         let offClass = '';
@@ -1520,6 +1627,11 @@
       if (toggle) {
         toggle.checked = sched.enabled !== false;
         toggleScheduleActiveState();
+      }
+
+      const showToggle = document.getElementById('enable-show-worked-time');
+      if (showToggle) {
+        showToggle.checked = sched.showWorkedTime !== false;
       }
 
       renderScheduleCalendar();
@@ -1715,6 +1827,7 @@
       localStorage.setItem(STORAGE_ENTRIES, JSON.stringify(data));
       renderTimeEntries();
       calculateRequiredRest();
+      renderScheduleCalendar();
       runAutoBackup();
     }
 
@@ -1728,6 +1841,7 @@
         localStorage.removeItem(STORAGE_ENTRIES);
         renderTimeEntries();
         calculateRequiredRest();
+        renderScheduleCalendar();
         runAutoBackup();
         alert("Alla pass har rensats.");
       }
@@ -1903,6 +2017,7 @@
 
       entries.unshift(newEntry);
       saveTimeEntries(entries);
+      autoSaveEntryToCalendar(newEntry);
 
       setActiveShift(null);
       alert(`Passet avslutat och sparat! (${workedHours} h arbetad tid)`);
@@ -2040,14 +2155,21 @@
       const desc = document.getElementById('time-desc').value.trim();
 
       let entries = getTimeEntries();
+      let entryObj;
       if (editId) {
         const idx = entries.findIndex(e => e.id === editId);
-        if (idx >= 0) entries[idx] = { id: editId, customerId, date, startTime, endTime, hours, breakMin, breaks, desc };
+        if (idx >= 0) {
+          entries[idx] = { id: editId, customerId, date, startTime, endTime, hours, breakMin, breaks, desc };
+          entryObj = entries[idx];
+        }
       } else {
-        entries.unshift({ id: 'entry_' + Date.now(), customerId, date, startTime, endTime, hours, breakMin, breaks, desc });
+        entryObj = { id: 'entry_' + Date.now(), customerId, date, startTime, endTime, hours, breakMin, breaks, desc };
+        entries.unshift(entryObj);
       }
 
       saveTimeEntries(entries);
+      if (entryObj) autoSaveEntryToCalendar(entryObj);
+      
       resetTimeForm();
       alert('Tidssegment sparat!');
     });
