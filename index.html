@@ -372,6 +372,13 @@
       margin-top: 1px;
       text-align: center;
     }
+    /* EGEN STIL FÖR PLANERADE PASS I FÖRVÄG (LILA/INDIGO) */
+    .calendar-cell .shift-tag.planned-shift {
+      background: #e0e7ff;
+      color: #3730a3;
+      border: 1px dashed #6366f1;
+      font-weight: 600;
+    }
     .calendar-cell .break-tag {
       background: #fef3c7;
       color: #92400e;
@@ -387,6 +394,7 @@
     .calendar-cell.off-day .shift-tag {
       background: #f3f4f6;
       color: #9ca3af;
+      border: none;
     }
   </style>
 </head>
@@ -664,8 +672,20 @@
         </label>
       </div>
 
+      <!-- FÖRKLARING AV KALENDERFÄRGER -->
+      <div style="display: flex; gap: 12px; margin-bottom: 12px; font-size: 11px; background: #f8fafc; padding: 8px; border-radius: 6px; border: 1px dashed var(--border);">
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <span style="width: 12px; height: 12px; background: #e0e7ff; border: 1px dashed #6366f1; border-radius: 2px; display: inline-block;"></span>
+          <span>Planerat pass (Lila)</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <span style="width: 12px; height: 12px; background: #dbeafe; border-radius: 2px; display: inline-block;"></span>
+          <span>Genomfört pass (Blå)</span>
+        </div>
+      </div>
+
       <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
-        Klicka på valfri dag i kalendern för att se och redigera tider, raster eller anteckningar.
+        Klicka på valfri dag i kalendern för att se, lägga till eller ta bort tider, raster och anteckningar.
       </p>
 
       <div id="schedule-controls-container">
@@ -750,13 +770,16 @@
       </div>
 
       <div class="form-group" style="margin-top: 12px;">
-        <label for="modal-sched-note">Anteckning / Vad som gjorts</label>
-        <textarea id="modal-sched-note" rows="2" placeholder="t.ex. Kundmöte, servicearbete..."></textarea>
+        <label for="modal-sched-note">Anteckning / Kund / Uppdrag</label>
+        <textarea id="modal-sched-note" rows="2" placeholder="t.ex. Acme AB - Servicearbete..."></textarea>
       </div>
 
-      <div class="modal-actions">
-        <button type="button" class="btn btn-secondary" onclick="closeScheduleDayModal()">Avbryt</button>
-        <button type="submit" class="btn btn-primary" style="width: auto;">Spara Dag</button>
+      <div class="modal-actions" style="justify-content: space-between;">
+        <button type="button" class="btn btn-danger btn-sm" onclick="deleteScheduleDayModal()">🗑️ Ta bort pass</button>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeScheduleDayModal()">Avbryt</button>
+          <button type="submit" class="btn btn-primary" style="width: auto;">Spara Dag</button>
+        </div>
       </div>
     </form>
   </dialog>
@@ -994,7 +1017,6 @@
     ];
 
     let timerInterval = null;
-    let audioCtx = null;
     let alarmStateMap = {};
     let androidFolderHandle = null;
     let currentCalDate = new Date();
@@ -1059,6 +1081,59 @@
         }
       });
     }
+
+    // --- ANMÄLNINGAR / NOTISER FÖR KOMMANDE PASS (24h & 12h) ---
+    function checkUpcomingShiftNotifications() {
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+      const sched = getScheduleInfo();
+      const shifts = sched.calendarShifts || {};
+      const notifiedShifts = JSON.parse(localStorage.getItem('app_notified_shifts') || '{}');
+      const now = Date.now();
+
+      Object.keys(shifts).forEach(dateStr => {
+        const shift = shifts[dateStr];
+        if (!shift || shift.off) return;
+
+        const startTime = shift.start || '08:00';
+        const shiftDate = new Date(`${dateStr}T${startTime}:00`);
+        const timeDiffMs = shiftDate.getTime() - now;
+        const hoursLeft = timeDiffMs / (1000 * 60 * 60);
+
+        if (!notifiedShifts[dateStr]) notifiedShifts[dateStr] = {};
+
+        // Påminnelse 24 timmar innan (mellan 23.5h och 24.5h)
+        if (hoursLeft > 23.5 && hoursLeft <= 24.5 && !notifiedShifts[dateStr]['24h']) {
+          showNotification(`📅 Påminnelse: Pass imorgon!`, `Du har ett planerat pass (${dateStr} kl. ${startTime}) om 24 timmar.`);
+          notifiedShifts[dateStr]['24h'] = true;
+        }
+
+        // Påminnelse 12 timmar innan (mellan 11.5h och 12.5h)
+        if (hoursLeft > 11.5 && hoursLeft <= 12.5 && !notifiedShifts[dateStr]['12h']) {
+          showNotification(`⏳ Påminnelse: Pass om 12 timmar!`, `Ditt pass (${dateStr} kl. ${startTime}) startar om 12 timmar.`);
+          notifiedShifts[dateStr]['12h'] = true;
+        }
+      });
+
+      localStorage.setItem('app_notified_shifts', JSON.stringify(notifiedShifts));
+    }
+
+    function showNotification(title, body) {
+      if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+        navigator.serviceWorker.ready.then(reg => {
+          reg.showNotification(title, {
+            body: body,
+            icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="%232563eb"/><text x="50" y="68" font-size="55" text-anchor="middle" fill="white" font-family="sans-serif" font-weight="bold">T</text></svg>',
+            vibrate: [200, 100, 200]
+          });
+        });
+      } else {
+        new Notification(title, { body: body });
+      }
+    }
+
+    // Interval för att kontinuerligt kontrollera kommande pass
+    setInterval(checkUpcomingShiftNotifications, 60000);
 
     // --- FLERA ANVÄNDARE / PROFILER ---
     function getAllProfiles() {
@@ -1211,6 +1286,7 @@
       if ('Notification' in window && Notification.permission === 'default') {
         await Notification.requestPermission();
       }
+      checkUpcomingShiftNotifications();
     }
 
     function updateBackgroundNotification(title, body, isRunning, isBreak) {
@@ -1549,11 +1625,13 @@
         breaks: breaks,
         breakMin: entry.breakMin || 0,
         note: `${custName}${entry.desc ? ' - ' + entry.desc : ''}`,
-        off: false
+        off: false,
+        isCompleted: true
       };
 
       localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
       renderScheduleCalendar();
+      checkUpcomingShiftNotifications();
     }
 
     function renderScheduleCalendar() {
@@ -1603,6 +1681,8 @@
         const isToday = dateStr === todayStr;
 
         let shift = shifts[dateStr];
+        let isCompletedWorked = false;
+
         if (showWorked) {
           const entryForDay = entries.find(e => e.date === dateStr);
           if (entryForDay) {
@@ -1616,8 +1696,10 @@
               breakMin: entryForDay.breakMin || 0,
               note: `${custName}${entryForDay.desc ? ' - ' + entryForDay.desc : ''}`,
               off: false,
-              displayLabel: custName
+              displayLabel: custName,
+              isCompleted: true
             };
+            isCompletedWorked = true;
           }
         }
 
@@ -1643,8 +1725,10 @@
               breakText = `☕ ${shift.breakMin}m`;
             }
 
+            const plannedClass = (dateStr > todayStr && !isCompletedWorked) ? ' planned-shift' : '';
+
             shiftContent = `
-              <div class="shift-tag" title="${label}">${label}</div>
+              <div class="shift-tag${plannedClass}" title="${label}">${label}</div>
               ${breakText ? `<div class="break-tag" title="Rast">${breakText}</div>` : ''}
             `;
           }
@@ -1741,6 +1825,31 @@
       document.getElementById('schedule-day-modal').close();
     }
 
+    function deleteScheduleDayModal() {
+      const dateStr = document.getElementById('modal-sched-date').value;
+      if (!dateStr) return;
+
+      if (confirm(`Vill du ta bort passet för ${dateStr}?`)) {
+        // Ta bort från kalender
+        const sched = getScheduleInfo();
+        if (sched.calendarShifts && sched.calendarShifts[dateStr]) {
+          delete sched.calendarShifts[dateStr];
+          localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
+        }
+
+        // Ta bort från rapporterade tidssegment om det finns
+        let entries = getTimeEntries();
+        const newEntries = entries.filter(e => e.date !== dateStr);
+        if (newEntries.length !== entries.length) {
+          saveTimeEntries(newEntries);
+        }
+
+        closeScheduleDayModal();
+        renderScheduleCalendar();
+        runAutoBackup();
+      }
+    }
+
     function toggleModalDayInputs() {
       const isOff = document.getElementById('modal-sched-off').checked;
       document.getElementById('modal-sched-times-group').style.display = isOff ? 'none' : 'block';
@@ -1778,6 +1887,7 @@
       localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
       closeScheduleDayModal();
       renderScheduleCalendar();
+      checkUpcomingShiftNotifications();
       runAutoBackup();
     }
 
@@ -1831,6 +1941,7 @@
 
         localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
         renderScheduleCalendar();
+        checkUpcomingShiftNotifications();
         runAutoBackup();
         alert(`Lyckades importera ${importedCount} skift till kalendern!`);
       };
@@ -2234,7 +2345,6 @@
       }
 
       function tick() {
-        // Beräkna alltid utifrån faktiska tidsstämplar (Date.now()) så tiden inte stannar i bakgrunden
         let currentWorkedMs = Date.now() - shift.startTime - shift.breakTimeMs;
         if (shift.status === 'break' && shift.breakStart) {
           currentWorkedMs = shift.breakStart - shift.startTime - shift.breakTimeMs;
@@ -2270,7 +2380,6 @@
       timerInterval = setInterval(tick, 1000);
     }
 
-    // Direkt uppdatering när fliken blir aktiv igen efter att ha legat i bakgrunden
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) {
         updateTimerUI();
@@ -2710,6 +2819,7 @@
           localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(data.schedule));
           loadScheduleInfoUI();
         }
+        checkUpcomingShiftNotifications();
         alert('Återställningen lyckades!');
       };
       reader.readAsText(file);
@@ -2888,6 +2998,7 @@
       updateTimerUI();
       loadFolderHandleFromIDB();
       loadSyncSettingsUI();
+      checkUpcomingShiftNotifications();
     });
   </script>
 </body>
