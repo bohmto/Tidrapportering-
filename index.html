@@ -2345,9 +2345,12 @@
       }
 
       function tick() {
-        let currentWorkedMs = Date.now() - shift.startTime - shift.breakTimeMs;
-        if (shift.status === 'break' && shift.breakStart) {
-          currentWorkedMs = shift.breakStart - shift.startTime - shift.breakTimeMs;
+        // Hämta det absolut senaste tillståndet från localStorage om det sparats om i bakgrunden
+        const currentShift = getActiveShift() || shift;
+
+        let currentWorkedMs = Date.now() - currentShift.startTime - currentShift.breakTimeMs;
+        if (currentShift.status === 'break' && currentShift.breakStart) {
+          currentWorkedMs = currentShift.breakStart - currentShift.startTime - currentShift.breakTimeMs;
         }
 
         const sec = Math.floor((Math.max(0, currentWorkedMs) / 1000) % 60);
@@ -2357,20 +2360,20 @@
 
         clock.innerText = clockText;
 
-        if (shift.status === 'working') {
-          subtext.innerText = `Startat kl ${new Date(shift.startTime).toTimeString().slice(0,5)}`;
+        if (currentShift.status === 'working') {
+          subtext.innerText = `Startat kl ${new Date(currentShift.startTime).toTimeString().slice(0,5)}`;
           topStatusText.innerText = `⏱️ ARBETAR: ${custName} (${clockText})`;
-          updateAppStatusIndicators(shift, clockText);
+          updateAppStatusIndicators(currentShift, clockText);
           updateBackgroundNotification(`⏱️ Arbetar på ${custName}`, `Arbetad tid: ${clockText}`, true, false);
-        } else if (shift.status === 'break') {
-          const elapsedBreakMs = Date.now() - shift.breakStart;
+        } else if (currentShift.status === 'break') {
+          const elapsedBreakMs = Date.now() - currentShift.breakStart;
           const bSec = Math.floor((elapsedBreakMs / 1000) % 60);
           const bMin = Math.floor((elapsedBreakMs / (1000 * 60)) % 60);
           const breakClockText = String(bMin).padStart(2, '0') + ':' + String(bSec).padStart(2, '0');
           
-          subtext.innerText = `På rast sedan ${new Date(shift.breakStart).toTimeString().slice(0,5)} (${breakClockText})`;
+          subtext.innerText = `På rast sedan ${new Date(currentShift.breakStart).toTimeString().slice(0,5)} (${breakClockText})`;
           topStatusText.innerText = `☕ RAST: ${custName} (Rast: ${breakClockText})`;
-          updateAppStatusIndicators(shift, clockText);
+          updateAppStatusIndicators(currentShift, clockText);
           updateBackgroundNotification(`☕ Rast på ${custName}`, `Rasttid: ${breakClockText}`, true, true);
         }
       }
@@ -2995,7 +2998,10 @@
       loadClientInfoUI();
       loadScheduleInfoUI();
       calculateRequiredRest();
+      
+      // Starta om timern automatiskt om ett pass är igång när appen öppnas
       updateTimerUI();
+      
       loadFolderHandleFromIDB();
       loadSyncSettingsUI();
       checkUpcomingShiftNotifications();
