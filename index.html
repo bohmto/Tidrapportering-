@@ -1,0 +1,2900 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Tidsrapportering & Avancerad Prissättning</title>
+  
+  <!-- SheetJS för äkta Excel (.xlsx) export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- PWA Manifest & Theme -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" id="dynamic-favicon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%232563eb'/><text x='50' y='68' font-size='55' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'>T</text></svg>">
+  <meta name="theme-color" content="#2563eb">
+
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-light: #eff6ff;
+      --success: #16a34a;
+      --warning: #d97706;
+      --danger: #ef4444;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --nav-height: 65px;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 16px;
+      padding-top: 60px;
+      padding-bottom: calc(var(--nav-height) + 24px);
+      font-size: 16px;
+    }
+
+    /* TOP STATUS BAR */
+    .top-status-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 44px;
+      background: #334155;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      z-index: 1000;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      transition: background-color 0.3s ease;
+    }
+    .top-status-bar.status-active-working {
+      background: #16a34a;
+      color: #ffffff;
+    }
+    .top-status-bar.status-active-break {
+      background: #d97706;
+      color: #ffffff;
+    }
+    .active-tab-badge {
+      background: rgba(255, 255, 255, 0.2);
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .tab-view { display: none; }
+    .tab-view.active { display: block; }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    h1 { font-size: 22px; margin: 0; }
+    h2 { font-size: 18px; margin: 0; }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1);
+    }
+
+    .timer-card {
+      background: #1e293b;
+      color: #fff;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+      text-align: center;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+    }
+
+    .timer-display {
+      font-size: 38px;
+      font-weight: 800;
+      font-family: monospace;
+      letter-spacing: 2px;
+      margin: 10px 0;
+      color: #38bdf8;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .status-idle { background: #334155; color: #94a3b8; }
+    .status-working { background: #166534; color: #86efac; }
+    .status-break { background: #854d0e; color: #fef08a; }
+
+    .compliance-box {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      text-align: left;
+      line-height: 1.4;
+      display: none;
+    }
+
+    .timer-buttons { display: flex; gap: 10px; margin-top: 16px; }
+
+    .form-group { margin-bottom: 14px; }
+    .form-row { display: flex; gap: 10px; }
+    .form-row .form-group { flex: 1; }
+
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    input[type="date"],
+    input[type="time"],
+    input[type="email"],
+    input[type="tel"],
+    select,
+    textarea {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 16px;
+      background: #fff;
+      color: var(--text);
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: 2px solid var(--primary);
+      border-color: transparent;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 52px;
+      height: 32px;
+      flex-shrink: 0;
+    }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #cbd5e1;
+      transition: .25s ease-in-out;
+      border-radius: 32px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 24px; width: 24px;
+      left: 4px; bottom: 4px;
+      background-color: white;
+      transition: .25s ease-in-out;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    input:checked + .slider { background-color: var(--primary); }
+    input:checked + .slider:before { transform: translateX(20px); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: none;
+      font-weight: 600;
+      font-size: 15px;
+      cursor: pointer;
+      flex: 1;
+    }
+
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-success { background: var(--success); color: white; }
+    .btn-warning { background: var(--warning); color: white; }
+    .btn-secondary { background: #e2e8f0; color: var(--text); }
+    .btn-danger { background: #fee2e2; color: var(--danger); }
+    .btn-sm { padding: 6px 12px; font-size: 13px; flex: initial; }
+
+    .ob-settings-box {
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      margin-top: 10px;
+    }
+
+    .ob-section-title {
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--primary);
+      margin-bottom: 8px;
+      border-bottom: 1px dashed var(--border);
+      padding-bottom: 4px;
+    }
+
+    /* BOTTENNAVIGERING */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: var(--nav-height);
+      background: #ffffff;
+      border-top: 2px solid var(--border);
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      z-index: 100;
+      box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+    }
+
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      width: 33.33%;
+      height: 100%;
+      border: none;
+      background: none;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.2s ease;
+    }
+    
+    .nav-item.active { 
+      color: var(--primary); 
+      font-weight: 800;
+      background-color: var(--primary-light);
+    }
+
+    .nav-item.active::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 15%;
+      right: 15%;
+      height: 4px;
+      background-color: var(--primary);
+      border-radius: 0 0 4px 4px;
+    }
+
+    .nav-icon { font-size: 20px; margin-bottom: 2px; }
+
+    dialog {
+      border: none;
+      border-radius: 16px;
+      padding: 20px;
+      width: 92vw;
+      max-width: 500px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+      background: var(--card-bg);
+      color: var(--text);
+    }
+    dialog::backdrop { background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(2px); }
+    .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+    .hidden-input { display: none; }
+
+    /* KALENDER DESIGN */
+    .calendar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 3px;
+      text-align: center;
+    }
+    .calendar-day-head {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      padding: 4px 0;
+    }
+    .calendar-cell {
+      min-height: 56px;
+      max-height: 56px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px;
+      font-size: 11px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      overflow: hidden;
+      transition: background 0.15s ease;
+    }
+    .calendar-cell:hover {
+      background: #e2e8f0;
+    }
+    .calendar-cell.other-month {
+      opacity: 0.35;
+    }
+    .calendar-cell.today {
+      border: 2px solid var(--primary);
+      font-weight: bold;
+    }
+    .calendar-cell .day-num {
+      font-size: 10px;
+      margin-bottom: 1px;
+    }
+    .calendar-cell .shift-tag {
+      background: #dbeafe;
+      color: #1e40af;
+      font-size: 8px;
+      line-height: 1.1;
+      border-radius: 3px;
+      padding: 2px;
+      width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 1px;
+      text-align: center;
+    }
+    .calendar-cell .shift-tag.planned-shift {
+      background: #e0e7ff;
+      color: #3730a3;
+      border: 1px dashed #6366f1;
+      font-weight: 600;
+    }
+    .calendar-cell .break-tag {
+      background: #fef3c7;
+      color: #92400e;
+      font-size: 8px;
+      border-radius: 2px;
+      padding: 1px 2px;
+      margin-top: 1px;
+      width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .calendar-cell.off-day .shift-tag {
+      background: #f3f4f6;
+      color: #9ca3af;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- FAST STATUSRAD HÖGST UPP -->
+  <div id="top-status-bar" class="top-status-bar">
+    <span id="top-status-text">⏹ Ingen tidtagning igång</span>
+    <span id="top-tab-badge" class="active-tab-badge">Tid</span>
+  </div>
+
+  <!-- FLIK 1: TIDSRAPPORTERING -->
+  <div id="tab-time" class="tab-view active">
+    <div class="header">
+      <h1>Tidsrapportering</h1>
+    </div>
+
+    <!-- LIVE STÄMPELKLOCKA -->
+    <div class="timer-card">
+      <div id="timer-badge" class="status-badge status-idle">Ej inloggad</div>
+      <div id="timer-clock" class="timer-display">00:00:00</div>
+      <div id="timer-subtext" style="font-size: 13px; color: #94a3b8; margin-bottom: 8px;">Välj kund och starta passet</div>
+
+      <div class="form-group" id="live-customer-group" style="text-align: left; margin-bottom: 12px;">
+        <select id="live-customer" style="background: #334155; color: #fff; border-color: #475569;">
+          <option value="">Välj kund för stämpling...</option>
+        </select>
+      </div>
+
+      <div class="form-group" id="break-options-group" style="text-align: left; margin-bottom: 12px;">
+        <label for="live-break-duration" style="font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Rast-timer (mål)</label>
+        <select id="live-break-duration" style="background: #334155; color: #fff; border-color: #475569; padding: 8px; font-size: 14px;">
+          <option value="0">Fri rast (ingen timer)</option>
+          <option value="15">15 min kaffepaus</option>
+          <option value="30" selected>30 min lunch</option>
+          <option value="45">45 min långrast</option>
+          <option value="60">60 min långlunch</option>
+        </select>
+      </div>
+
+      <div class="form-group" id="compliance-toggle-group" style="text-align: left; margin-bottom: 12px;">
+        <label style="font-size: 12px; color: #94a3b8; display: flex; align-items: center; gap: 8px;">
+          <input type="checkbox" id="enable-transport-rules" checked style="width: auto;">
+          Bevaka Vägarbetstid & Larm (15 min)
+        </label>
+      </div>
+
+      <!-- Live efterlevnadsbox -->
+      <div id="compliance-box" class="compliance-box"></div>
+
+      <div class="timer-buttons">
+        <button id="btn-start" class="btn btn-success" onclick="startShift()">▶ Starta pass</button>
+        <button id="btn-break" class="btn btn-warning" onclick="toggleBreak()" style="display:none;">☕ Starta rast</button>
+        <button id="btn-stop" class="btn btn-danger" onclick="stopShift()" style="display:none;">⏹ Avsluta & Spara</button>
+      </div>
+    </div>
+
+    <!-- REGISTRERINGSFORMULÄR -->
+    <div class="card">
+      <h2 id="form-title" style="margin-bottom: 12px;">Spara pass</h2>
+      <form id="time-form">
+        <input type="hidden" id="entry-edit-id" value="">
+
+        <div class="form-group">
+          <label for="time-customer">Kund *</label>
+          <select id="time-customer" required>
+            <option value="">Välj kund...</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="time-date">Datum *</label>
+          <input type="date" id="time-date" required>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="time-start">Starttid</label>
+            <input type="time" id="time-start" onchange="autoCalculateHours()">
+          </div>
+          <div class="form-group">
+            <label for="time-end">Sluttid</label>
+            <input type="time" id="time-end" onchange="autoCalculateHours()">
+          </div>
+        </div>
+
+        <!-- RASTTIDER -->
+        <div class="form-group" style="background:#f8fafc; padding:12px; border-radius:8px; border:1px solid var(--border);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <label style="margin:0; font-size:14px;">☕ Rasttider</label>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="addBreakRow()">+ Lägg till rast</button>
+          </div>
+          <div id="break-rows-container"></div>
+          <input type="hidden" id="time-break" value="0">
+          <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">Total obetald rast: <span id="total-break-display">0</span> min</div>
+        </div>
+
+        <div class="form-group">
+          <label for="time-hours">Arbetad tid exkl. rast (h, t.ex. 7.5) *</label>
+          <input type="number" id="time-hours" step="0.01" min="0" placeholder="t.ex. 7.5 eller 8" required>
+        </div>
+
+        <div class="form-group">
+          <label for="time-desc">Beskrivning / Moment</label>
+          <input type="text" id="time-desc" placeholder="t.ex. Konsultation, arbetspass...">
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button type="button" id="btn-cancel-edit" class="btn btn-secondary" onclick="resetTimeForm()" style="display:none;">Avbryt</button>
+          <button type="submit" id="btn-save-entry" class="btn btn-primary" style="flex:1;">Spara tidssegment</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- EXPORTPANEL -->
+    <div class="card" style="background: #f1f5f9; border: 1px solid var(--border); margin-top: 24px;">
+      <h2 style="margin-bottom: 12px; font-size: 16px;">Exportera rapport</h2>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;">
+        <div style="flex: 1; min-width: 130px;">
+          <label for="export-customer-select" style="font-size: 12px; margin-bottom: 4px;">Kund</label>
+          <select id="export-customer-select" style="padding: 8px; font-size: 14px;">
+            <option value="all">Alla kunder</option>
+          </select>
+        </div>
+        <div style="flex: 1; min-width: 120px;">
+          <label for="export-from-date" style="font-size: 12px; margin-bottom: 4px;">Från datum</label>
+          <input type="date" id="export-from-date" style="padding: 7px; font-size: 14px;">
+        </div>
+        <div style="flex: 1; min-width: 120px;">
+          <label for="export-to-date" style="font-size: 12px; margin-bottom: 4px;">Till datum</label>
+          <input type="date" id="export-to-date" style="padding: 7px; font-size: 14px;">
+        </div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; width: 100%; margin-top: 8px;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="clearExportFilters()">Rensa filter</button>
+          <button type="button" class="btn btn-danger btn-sm" onclick="clearAllEntries()">Rensa alla pass</button>
+          <button type="button" class="btn btn-success btn-sm" onclick="exportExcel()">Exportera Excel (.xlsx)</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="exportCSV()">Exportera CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="header" style="margin-top: 20px;">
+      <h2>Rapporterade pass</h2>
+    </div>
+
+    <div id="time-list"></div>
+    <div id="monthly-overview"></div>
+  </div>
+
+  <!-- FLIK 2: KUNDHANTERING & SYNK -->
+  <div id="tab-customers" class="tab-view">
+    <div class="header">
+      <h1>Kunder & Prislistor</h1>
+      <button class="btn btn-primary btn-sm" onclick="openCustomerModal()">+ Ny kund</button>
+    </div>
+
+    <div id="customer-list"></div>
+
+    <!-- SYNKRONISERING & BACKUP -->
+    <div class="card" style="margin-top: 32px;">
+      <h2 style="margin-bottom: 12px; font-size: 16px;">Moln- & Serversynkronisering</h2>
+      
+      <div class="form-group">
+        <label for="syncMethod">Välj synkroniseringsmetod</label>
+        <select id="syncMethod" onchange="updateSyncVisibility()">
+          <option value="cloud">Lokal molnmapp / Android-mapp</option>
+          <option value="server">Egen server (WebDAV / API)</option>
+          <option value="both">Både molnmapp och egen server</option>
+        </select>
+      </div>
+
+      <!-- Serverinställningar -->
+      <div id="serverSettingsGroup" class="ob-settings-box" style="display: none; margin-bottom: 14px;">
+        <div class="ob-section-title">🌐 Egen Server / WebDAV</div>
+        <div class="form-group">
+          <label for="serverUrl">Server-URL (API / WebDAV)</label>
+          <input type="text" id="serverUrl" placeholder="https://din-server.se/api/tider">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="apiKey">API-nyckel / Token</label>
+          <input type="password" id="apiKey" placeholder="Hemlig nyckel">
+        </div>
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <button class="btn btn-primary btn-sm" style="width: 100%; margin-bottom: 8px;" onclick="selectAndroidBackupFolder()">💾 Exportera / Dela säkerhetskopia</button>
+        <div id="backup-folder-status" style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">Sparar via Androids delningsmeny (Drive, OneDrive, e-post m.m.).</div>
+      </div>
+
+      <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+        <button class="btn btn-success btn-sm" style="flex: 1;" onclick="triggerManualSync()">🔄 Synkronisera nu</button>
+        <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="saveSyncSettingsUI()">Spara inställningar</button>
+      </div>
+
+      <div style="border-top: 1px solid var(--border); padding-top: 16px;">
+        <label style="color: var(--text-muted); font-size: 13px; text-transform: uppercase; display: block;">Manuell Säkerhetskopia (JSON)</label>
+        <div style="display: flex; gap: 10px; margin-top: 8px;">
+          <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="exportData()">Spara backup</button>
+          <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="document.getElementById('import-file').click()">Läs in backup</button>
+        </div>
+        <input type="file" id="import-file" class="hidden-input" accept=".json" onchange="importData(event)">
+      </div>
+    </div>
+  </div>
+
+  <!-- FLIK 3: ANVÄNDARE & SCHEMA -->
+  <div id="tab-client" class="tab-view">
+    <div class="header">
+      <h1>Användare & Schema</h1>
+    </div>
+
+    <!-- ANVÄNDARPROFILER (VÄXLA / LÄGG TILL) -->
+    <div class="card" style="background: #e0f2fe; border: 1px solid #bae6fd;">
+      <h2 style="margin-bottom: 8px; font-size: 16px; color: #0369a1;">👤 Aktiva Profiler (Flera användare)</h2>
+      <p style="font-size: 12px; color: #0369a1; margin-bottom: 12px;">
+        Välj vilken användare som är aktiv på enheten, eller skapa en ny profil.
+      </p>
+      
+      <div class="form-row" style="align-items: center; margin-bottom: 10px;">
+        <div class="form-group" style="margin-bottom:0; flex:2;">
+          <label for="profile-select" style="font-size: 12px;">Aktiv användare</label>
+          <select id="profile-select" onchange="switchUserProfile(this.value)" style="padding: 10px; font-size: 15px;"></select>
+        </div>
+        <div style="display: flex; align-items: flex-end; padding-top: 20px;">
+          <button type="button" class="btn btn-primary btn-sm" onclick="promptNewUserProfile()">+ Ny</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ANVÄNDARENS UPPGIFTER -->
+    <div class="card">
+      <h2 style="margin-bottom: 12px;">Användarens Uppgifter</h2>
+      <form id="client-info-form" onsubmit="saveClientInfo(event)">
+        <div class="form-group">
+          <label for="client-name">Användarens Namn</label>
+          <input type="text" id="client-name" placeholder="t.ex. Anna Svensson">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="client-email">E-postadress</label>
+            <input type="email" id="client-email" placeholder="anna@example.com">
+          </div>
+          <div class="form-group">
+            <label for="client-phone">Telefonnummer</label>
+            <input type="tel" id="client-phone" placeholder="070-123 45 67">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="client-address">Adress / Säte</label>
+          <input type="text" id="client-address" placeholder="Storgatan 1, 123 45 Staden">
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Spara användare</button>
+      </form>
+    </div>
+
+    <!-- INTERAKTIV SKIFTSCHEMA-KALENDER -->
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h2 style="margin: 0;">Arbetsschema / Skift</h2>
+        <label class="switch">
+          <input type="checkbox" id="enable-schedule-toggle" checked onchange="toggleScheduleActiveState()">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- DÖLJ/VISA SPARAD TID I KALENDER -->
+      <div style="display: flex; justify-content: space-between; align-items: center; background: #f1f5f9; padding: 10px 12px; border-radius: 8px; margin-bottom: 12px;">
+        <div>
+          <label for="enable-show-worked-time" style="margin: 0; font-size: 13px;">Visa sparad tid i kalendern</label>
+          <span style="font-size: 11px; color: var(--text-muted);">Slå av för att dölja sparade pass i vyn</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="enable-show-worked-time" checked onchange="saveScheduleSettingsUI()">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- FÖRKLARING AV KALENDERFÄRGER -->
+      <div style="display: flex; gap: 12px; margin-bottom: 12px; font-size: 11px; background: #f8fafc; padding: 8px; border-radius: 6px; border: 1px dashed var(--border);">
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <span style="width: 12px; height: 12px; background: #e0e7ff; border: 1px dashed #6366f1; border-radius: 2px; display: inline-block;"></span>
+          <span>Planerat pass (Lila)</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <span style="width: 12px; height: 12px; background: #dbeafe; border-radius: 2px; display: inline-block;"></span>
+          <span>Genomfört pass (Blå)</span>
+        </div>
+      </div>
+
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+        Klicka på valfri dag i kalendern för att se, lägga till eller ta bort tider, raster och anteckningar.
+      </p>
+
+      <div id="schedule-controls-container">
+        <!-- KALENDERKONTROLLER -->
+        <div class="calendar-header">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="navigateCalendarMonth(-1)">◀ Föregående</button>
+          <strong id="calendar-month-title" style="font-size: 16px;">Månad År</strong>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="navigateCalendarMonth(1)">Nästa ▶</button>
+        </div>
+
+        <!-- KALENDER GRID -->
+        <div class="calendar-grid" id="calendar-grid">
+          <!-- Genereras av JS -->
+        </div>
+
+        <!-- KALENDERIMPORT & INSTÄLLNINGAR -->
+        <div class="ob-settings-box" style="margin-top: 16px;">
+          <div class="ob-section-title">📅 Importera Schema (.ics / iCalendar)</div>
+          <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">
+            Ladda upp en kalenderfil från t.ex. Google Calendar, Outlook eller din arbetsgivare för att fylla skiftschemat automatiskt.
+          </p>
+          <input type="file" id="ics-import-file" class="hidden-input" accept=".ics,text/calendar" onchange="importIcsCalendar(event)">
+          <button type="button" class="btn btn-secondary btn-sm" style="width: 100%;" onclick="document.getElementById('ics-import-file').click()">
+            📥 Välj .ics-fil att importera
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- DYNAMISK VILOTIDSRÄKNARE -->
+    <div class="card" style="background: #f1f5f9; border: 1px solid var(--border);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h2 style="margin: 0; font-size: 16px; color: var(--primary);">📊 Beräknat Vilotidsbehov</h2>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="calculateRequiredRest()">🔄 Uppdatera</button>
+      </div>
+
+      <div id="rest-calculator-output" style="font-size: 13px; line-height: 1.5; color: var(--text);">
+        <!-- Fylls i automatiskt via JavaScript -->
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MODAL: EDITA SCHEMA-DAG -->
+  <dialog id="schedule-day-modal">
+    <form id="schedule-day-form" onsubmit="saveScheduleDayModal(event)">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 id="schedule-modal-date-title" style="margin: 0;">Redigera Skift</h3>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeScheduleDayModal()">✕</button>
+      </div>
+
+      <input type="hidden" id="modal-sched-date" value="">
+
+      <div class="form-group" style="display: flex; justify-content: space-between; align-items: center; background: #f1f5f9; padding: 12px; border-radius: 8px;">
+        <label for="modal-sched-off" style="margin: 0;">Ledig / Skiftfri</label>
+        <label class="switch">
+          <input type="checkbox" id="modal-sched-off" onchange="toggleModalDayInputs()">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div id="modal-sched-times-group">
+        <div class="form-row" style="margin-top: 12px;">
+          <div class="form-group">
+            <label for="modal-sched-start">Starttid</label>
+            <input type="time" id="modal-sched-start" value="07:00">
+          </div>
+          <div class="form-group">
+            <label for="modal-sched-end">Sluttid</label>
+            <input type="time" id="modal-sched-end" value="16:00">
+          </div>
+        </div>
+
+        <!-- RASTTIDER I MODAL -->
+        <div class="form-group" style="background:#f8fafc; padding:10px; border-radius:8px; border:1px solid var(--border); margin-top: 10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <label style="margin:0; font-size:13px;">☕ Rasttider</label>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="addModalBreakRow()">+ Lägg till rast</button>
+          </div>
+          <div id="modal-break-rows-container"></div>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-top: 12px;">
+        <label for="modal-sched-note">Anteckning / Kund / Uppdrag</label>
+        <textarea id="modal-sched-note" rows="2" placeholder="t.ex. Acme AB - Servicearbete..."></textarea>
+      </div>
+
+      <div class="modal-actions" style="justify-content: space-between;">
+        <button type="button" class="btn btn-danger btn-sm" onclick="deleteScheduleDayModal()">🗑️ Ta bort pass</button>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeScheduleDayModal()">Avbryt</button>
+          <button type="submit" class="btn btn-primary" style="width: auto;">Spara Dag</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- MODAL: SKAPA/REDIGERA KUND -->
+  <dialog id="customer-modal">
+    <form id="customer-form">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 id="modal-title" style="margin: 0;">Redigera kund</h3>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeCustomerModal()">✕</button>
+      </div>
+
+      <input type="hidden" id="field-id">
+
+      <div class="form-group">
+        <label for="field-name">Kundnamn *</label>
+        <input type="text" id="field-name" placeholder="t.ex. Acme AB" required>
+      </div>
+
+      <div class="form-group">
+        <label for="field-rate">Ordinarie timpris (kr/h) *</label>
+        <input type="number" id="field-rate" step="any" min="0" placeholder="850" required>
+      </div>
+
+      <div class="form-group" style="display: flex; justify-content: space-between; align-items: center; background: #e2e8f0; padding: 12px; border-radius: 8px; margin-bottom: 8px;">
+        <div>
+          <label for="field-night-exempt" style="margin: 0;">Undantag nattarbetstak (10h)</label>
+          <span style="font-size: 12px; color: var(--text-muted);">Kollektivavtalat undantag för arbete kl 01–05</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="field-night-exempt">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- OB-INSTÄLLNINGAR -->
+      <div class="form-group" style="display: flex; justify-content: space-between; align-items: center; background: #e2e8f0; padding: 12px; border-radius: 8px; margin-bottom: 8px;">
+        <div>
+          <label for="field-ob" style="margin: 0;">Aktivera OB-beräkning</label>
+          <span style="font-size: 12px; color: var(--text-muted);">Anpassa OB för vardagar och helg</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="field-ob" onchange="toggleOBFormFields()">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div id="ob-settings-container" class="ob-settings-box" style="display: none;">
+        <div class="ob-section-title">📅 Vardags-OB (Måndag–Fredag)</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="field-ob-start">OB Start</label>
+            <input type="time" id="field-ob-start" value="18:00">
+          </div>
+          <div class="form-group">
+            <label for="field-ob-end">OB Slut</label>
+            <input type="time" id="field-ob-end" value="06:00">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="field-ob-type">Vardags-OB pristyp</label>
+            <select id="field-ob-type">
+              <option value="multiplier">Multiplikator (t.ex. 1.5×)</option>
+              <option value="addon">Fast tillägg (t.ex. +250 kr/h)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="field-ob-value" id="label-ob-value">OB-faktor</label>
+            <input type="number" id="field-ob-value" step="0.1" min="0" placeholder="1.5">
+          </div>
+        </div>
+
+        <div class="ob-section-title" style="margin-top: 16px;">🎈 Helg-OB (Lördag–Söndag)</div>
+        <div class="form-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <label for="field-ob-weekend-enable" style="margin: 0;">Egen OB-taxa på helg</label>
+          <input type="checkbox" id="field-ob-weekend-enable" style="width: auto;" onchange="toggleWeekendFields()">
+        </div>
+
+        <div id="weekend-fields-container">
+          <div class="form-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <label for="field-ob-weekend-allday" style="margin: 0; font-size: 13px;">Gäller hela dygnet på helgen</label>
+            <input type="checkbox" id="field-ob-weekend-allday" style="width: auto;" checked onchange="toggleWeekendTimes()">
+          </div>
+
+          <div class="form-row" id="weekend-times-row" style="display: none;">
+            <div class="form-group">
+              <label for="field-ob-weekend-start">Helg-OB Start</label>
+              <input type="time" id="field-ob-weekend-start" value="00:00">
+            </div>
+            <div class="form-group">
+              <label for="field-ob-weekend-end">Helg-OB Slut</label>
+              <input type="time" id="field-ob-weekend-end" value="23:59">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="field-ob-weekend-type">Helg-OB pristyp</label>
+              <select id="field-ob-weekend-type">
+                <option value="multiplier">Multiplikator (t.ex. 2.0×)</option>
+                <option value="addon">Fast tillägg (t.ex. +400 kr/h)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="field-ob-weekend-value" id="label-ob-weekend-value">Helg-faktor</label>
+              <input type="number" id="field-ob-weekend-value" step="0.1" min="0" placeholder="2.0">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ÖVERTIDSINSTÄLLNINGAR PER KUND -->
+      <div class="form-group" style="display: flex; justify-content: space-between; align-items: center; background: #e2e8f0; padding: 12px; border-radius: 8px; margin-bottom: 8px; margin-top: 12px;">
+        <div>
+          <label for="field-ot-enabled" style="margin: 0;">Aktivera Övertid</label>
+          <span style="font-size: 12px; color: var(--text-muted); display: block;">Anpassa övertidsersättning för kunden</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="field-ot-enabled" onchange="toggleOTFormFields()">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div id="ot-settings-container" class="ob-settings-box" style="display: none;">
+        <div class="ob-section-title">🚛 Övertidsregler & Månadstak</div>
+        
+        <div class="form-group">
+          <label for="field-ot-monthly-cap">Månadstak ordinarie tid (h)</label>
+          <input type="number" id="field-ot-monthly-cap" step="1" min="0" value="160" placeholder="160">
+          <span style="font-size: 11px; color: var(--text-muted);">Överskjutande timmar under en månad räknas som övertid.</span>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="field-ot-rate-type">Ersättningstyp</label>
+            <select id="field-ot-rate-type" onchange="updateCustomerOTLabels()">
+              <option value="multiplier">Multiplikator (t.ex. 1.5× / 2.0×)</option>
+              <option value="addon">Fast kr/h tillägg (+60 kr / +120 kr)</option>
+              <option value="fixed_rate">Fast timlön på övertid (t.ex. 350 kr/h)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="field-ot-simple-val" id="cust-ot-simple-label">Övertidsfaktor / Tillägg</label>
+            <input type="number" id="field-ot-simple-val" step="0.1" value="1.5" placeholder="1.5">
+          </div>
+          <div class="form-group">
+            <label for="field-ot-qual-val" id="cust-ot-qual-label">Kvalificerad Övertid (Helg)</label>
+            <input type="number" id="field-ot-qual-val" step="0.1" value="2.0" placeholder="2.0">
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-top: 12px;">
+        <label for="field-notes">Anteckningar / Projektinfo</label>
+        <textarea id="field-notes" rows="2" placeholder="Faktureringsrutiner, projektnummer..."></textarea>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-danger btn-sm" id="btn-delete-customer" onclick="deleteCurrentCustomer()" style="display: none;">Ta bort</button>
+        <div style="flex: 1;"></div>
+        <button type="button" class="btn btn-secondary" onclick="closeCustomerModal()">Avbryt</button>
+        <button type="submit" class="btn btn-primary" style="width: auto;">Spara</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- NAVIGERINGSBARR -->
+  <nav class="bottom-nav">
+    <button class="nav-item active" id="nav-time" onclick="switchTab('time')">
+      <span class="nav-icon">⏱️</span>
+      <span>Tid</span>
+    </button>
+    <button class="nav-item" id="nav-customers" onclick="switchTab('customers')">
+      <span class="nav-icon">👥</span>
+      <span>Kunder</span>
+    </button>
+    <button class="nav-item" id="nav-client" onclick="switchTab('client')">
+      <span class="nav-icon">👤</span>
+      <span>Användare</span>
+    </button>
+  </nav>
+
+  <script>
+    let activeProfileId = localStorage.getItem('app_active_profile_id') || 'default_user';
+
+    function getStorageKey(base) {
+      return `${base}_${activeProfileId}`;
+    }
+
+    const TAB_NAMES = {
+      'time': 'Tid',
+      'customers': 'Kunder',
+      'client': 'Användare'
+    };
+
+    const DEFAULT_CUSTOMERS = [
+      {
+        id: 'k_1',
+        name: 'Acme AB',
+        hourly_rate: 850,
+        night_work_exempt: false,
+        ob_enabled: true,
+        ob_start_time: '18:00',
+        ob_end_time: '06:00',
+        ob_rate_type: 'multiplier',
+        ob_rate_value: 1.5,
+        ob_weekend_enabled: true,
+        ob_weekend_allday: true,
+        ob_weekend_start_time: '00:00',
+        ob_weekend_end_time: '23:59',
+        ob_weekend_rate_type: 'multiplier',
+        ob_weekend_rate_value: 2.0,
+        ot_enabled: true,
+        ot_monthly_cap: 160,
+        ot_rate_type: 'multiplier',
+        ot_simple_value: 1.5,
+        ot_qual_value: 2.0,
+        notes: 'Vardag OB 1.5x (18-06), Helg OB 2.0x hela dygnet, Månadstak 160h'
+      },
+      {
+        id: 'k_2',
+        name: 'Konsultbolaget AB',
+        hourly_rate: 950,
+        night_work_exempt: true,
+        ob_enabled: false,
+        ot_enabled: false,
+        ot_monthly_cap: 160,
+        notes: 'Undantag nattarbete 10h (Kollektivavtal)'
+      }
+    ];
+
+    let timerInterval = null;
+    let alarmStateMap = {};
+    let currentCalDate = new Date();
+
+    // --- FLIK-SVEPNING (SWIPE) ---
+    const tabsList = ['time', 'customers', 'client'];
+    let touchStartX = 0;
+    let touchEndX = 0;
+
+    document.addEventListener('touchstart', e => {
+      touchStartX = e.changedTouches[0].screenX;
+    }, false);
+
+    document.addEventListener('touchend', e => {
+      touchEndX = e.changedTouches[0].screenX;
+      handleSwipeGesture();
+    }, false);
+
+    function handleSwipeGesture() {
+      const swipeThreshold = 60;
+      if (touchEndX < touchStartX - swipeThreshold) {
+        let currentActive = tabsList.find(t => document.getElementById(`tab-${t}`).classList.contains('active'));
+        let currentIndex = tabsList.indexOf(currentActive);
+        if (currentIndex < tabsList.length - 1) {
+          switchTab(tabsList[currentIndex + 1]);
+        }
+      }
+      if (touchEndX > touchStartX + swipeThreshold) {
+        let currentActive = tabsList.find(t => document.getElementById(`tab-${t}`).classList.contains('active'));
+        let currentIndex = tabsList.indexOf(currentActive);
+        if (currentIndex > 0) {
+          switchTab(tabsList[currentIndex - 1]);
+        }
+      }
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-view').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.bottom-nav .nav-item').forEach(el => el.classList.remove('active'));
+
+      document.getElementById(`tab-${tab}`).classList.add('active');
+      document.getElementById(`nav-${tab}`).classList.add('active');
+
+      const badge = document.getElementById('top-tab-badge');
+      if (badge) {
+        badge.innerText = TAB_NAMES[tab] || 'Tid';
+      }
+    }
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').then(reg => {
+          console.log('Service Worker registrerad:', reg);
+        }).catch(err => {
+          console.error('Service Worker fel vid registrering:', err);
+        });
+      });
+
+      navigator.serviceWorker.addEventListener('message', event => {
+        if (event.data && event.data.type === 'TOGGLE_BREAK_ACTION') {
+          toggleBreak();
+        }
+      });
+    }
+
+    // --- ANMÄLNINGAR / NOTISER FÖR KOMMANDE PASS (24h & 12h) ---
+    function checkUpcomingShiftNotifications() {
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+      const sched = getScheduleInfo();
+      const shifts = sched.calendarShifts || {};
+      const notifiedShifts = JSON.parse(localStorage.getItem('app_notified_shifts') || '{}');
+      const now = Date.now();
+
+      Object.keys(shifts).forEach(dateStr => {
+        const shift = shifts[dateStr];
+        if (!shift || shift.off) return;
+
+        const startTime = shift.start || '08:00';
+        const shiftDate = new Date(`${dateStr}T${startTime}:00`);
+        const timeDiffMs = shiftDate.getTime() - now;
+        const hoursLeft = timeDiffMs / (1000 * 60 * 60);
+
+        if (!notifiedShifts[dateStr]) notifiedShifts[dateStr] = {};
+
+        // Påminnelse 24 timmar innan
+        if (hoursLeft > 23.5 && hoursLeft <= 24.5 && !notifiedShifts[dateStr]['24h']) {
+          showNotification(`📅 Påminnelse: Pass imorgon!`, `Du har ett planerat pass (${dateStr} kl. ${startTime}) om 24 timmar.`);
+          notifiedShifts[dateStr]['24h'] = true;
+        }
+
+        // Påminnelse 12 timmar innan
+        if (hoursLeft > 11.5 && hoursLeft <= 12.5 && !notifiedShifts[dateStr]['12h']) {
+          showNotification(`⏳ Påminnelse: Pass om 12 timmar!`, `Ditt pass (${dateStr} kl. ${startTime}) startar om 12 timmar.`);
+          notifiedShifts[dateStr]['12h'] = true;
+        }
+      });
+
+      localStorage.setItem('app_notified_shifts', JSON.stringify(notifiedShifts));
+    }
+
+    function showNotification(title, body) {
+      if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+        navigator.serviceWorker.ready.then(reg => {
+          reg.showNotification(title, {
+            body: body,
+            icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="%232563eb"/><text x="50" y="68" font-size="55" text-anchor="middle" fill="white" font-family="sans-serif" font-weight="bold">T</text></svg>',
+            vibrate: [200, 100, 200]
+          });
+        });
+      } else {
+        new Notification(title, { body: body });
+      }
+    }
+
+    setInterval(checkUpcomingShiftNotifications, 60000);
+
+    // --- FLERA ANVÄNDARE / PROFILER ---
+    function getAllProfiles() {
+      const stored = localStorage.getItem('app_user_profiles_list');
+      if (stored) return JSON.parse(stored);
+      return [
+        { id: 'default_user', name: 'Standardanvändare' }
+      ];
+    }
+
+    function saveAllProfiles(profiles) {
+      localStorage.setItem('app_user_profiles_list', JSON.stringify(profiles));
+    }
+
+    function renderProfileDropdown() {
+      const select = document.getElementById('profile-select');
+      if (!select) return;
+      const profiles = getAllProfiles();
+      select.innerHTML = '';
+      profiles.forEach(p => {
+        select.innerHTML += `<option value="${p.id}" ${p.id === activeProfileId ? 'selected' : ''}>${p.name}</option>`;
+      });
+    }
+
+    function switchUserProfile(profileId) {
+      activeProfileId = profileId;
+      localStorage.setItem('app_active_profile_id', activeProfileId);
+      
+      renderProfileDropdown();
+      populateCustomerDropdowns();
+      renderCustomerList();
+      renderTimeEntries();
+      loadClientInfoUI();
+      loadScheduleInfoUI();
+      calculateRequiredRest();
+      updateTimerUI();
+      migrateOldEntries();
+    }
+
+    function promptNewUserProfile() {
+      const name = prompt("Ange namn på den nya användaren:");
+      if (!name || !name.trim()) return;
+
+      const profileId = 'user_' + Date.now();
+      let profiles = getAllProfiles();
+      profiles.push({ id: profileId, name: name.trim() });
+      saveAllProfiles(profiles);
+
+      switchUserProfile(profileId);
+
+      const client = getClientInfo();
+      client.name = name.trim();
+      localStorage.setItem(getStorageKey('app_client_info_v5'), JSON.stringify(client));
+      loadClientInfoUI();
+
+      alert(`Användare "${name.trim()}" skapad och aktiverad!`);
+    }
+
+    // --- MIGRERING AV GAMLA RASTER ---
+    function addMinutesToTime(timeStr, mins) {
+      const [h, m] = timeStr.split(':').map(Number);
+      let totalMins = h * 60 + m + mins;
+      let newH = Math.floor(totalMins / 60) % 24;
+      let newM = totalMins % 60;
+      return String(newH).padStart(2, '0') + ':' + String(newM).padStart(2, '0');
+    }
+
+    function migrateOldEntries() {
+      let entries = getTimeEntries();
+      let updated = false;
+
+      entries.forEach(entry => {
+        if (entry.breakMin && (!entry.breaks || entry.breaks.length === 0)) {
+          entry.breaks = [{
+            start: "12:00",
+            end: addMinutesToTime("12:00", entry.breakMin)
+          }];
+          updated = true;
+        }
+      });
+
+      if (updated) {
+        localStorage.setItem(getStorageKey('app_time_entries_v5'), JSON.stringify(entries));
+      }
+    }
+
+    function addBreakRow(start = '', end = '') {
+      const container = document.getElementById('break-rows-container');
+      const rowId = 'break_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+      const div = document.createElement('div');
+      div.className = 'form-row break-row-item';
+      div.id = rowId;
+      div.style.marginBottom = '8px';
+      div.innerHTML = `
+        <div class="form-group" style="margin-bottom:0;">
+          <label style="font-size:11px; margin-bottom:2px;">Start rast</label>
+          <input type="time" class="break-start-input" value="${start}" onchange="calculateTotalBreaks()">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label style="font-size:11px; margin-bottom:2px;">Slut rast</label>
+          <input type="time" class="break-end-input" value="${end}" onchange="calculateTotalBreaks()">
+        </div>
+        <div style="display:flex; align-items:flex-end;">
+          <button type="button" class="btn btn-danger btn-sm" onclick="document.getElementById('${rowId}').remove(); calculateTotalBreaks();">✕</button>
+        </div>
+      `;
+      container.appendChild(div);
+      calculateTotalBreaks();
+    }
+
+    function calculateTotalBreaks() {
+      const container = document.getElementById('break-rows-container');
+      const startInputs = container.querySelectorAll('.break-start-input');
+      const endInputs = container.querySelectorAll('.break-end-input');
+      
+      let totalMins = 0;
+      for (let i = 0; i < startInputs.length; i++) {
+        const s = startInputs[i].value;
+        const e = endInputs[i].value;
+        if (s && e) {
+          const [sh, sm] = s.split(':').map(Number);
+          const [eh, em] = e.split(':').map(Number);
+          let startMins = sh * 60 + sm;
+          let endMins = eh * 60 + em;
+          if (endMins < startMins) endMins += 24 * 60;
+          const diff = endMins - startMins;
+          if (diff > 0) totalMins += diff;
+        }
+      }
+      
+      document.getElementById('time-break').value = totalMins;
+      document.getElementById('total-break-display').innerText = totalMins;
+      autoCalculateHours();
+    }
+
+    function getBreaksFromForm() {
+      const container = document.getElementById('break-rows-container');
+      const breakRows = [];
+      container.querySelectorAll('.break-row-item').forEach(row => {
+        const s = row.querySelector('.break-start-input').value;
+        const e = row.querySelector('.break-end-input').value;
+        if (s || e) {
+          breakRows.push({ start: s, end: e });
+        }
+      });
+      return breakRows;
+    }
+
+    async function requestNotificationPermission() {
+      if ('Notification' in window && Notification.permission === 'default') {
+        await Notification.requestPermission();
+      }
+      checkUpcomingShiftNotifications();
+    }
+
+    function updateBackgroundNotification(title, body, isRunning, isBreak) {
+      if ('Notification' in window && Notification.permission === 'granted' && navigator.serviceWorker) {
+        navigator.serviceWorker.ready.then(reg => {
+          if (reg.active) {
+            reg.active.postMessage({
+              type: 'UPDATE_SHIFT_NOTIFICATION',
+              title: title,
+              body: body,
+              isRunning: isRunning,
+              isBreak: isBreak
+            });
+          }
+        });
+      }
+    }
+
+    function clearBackgroundNotification() {
+      if ('Notification' in window && navigator.serviceWorker) {
+        navigator.serviceWorker.ready.then(reg => {
+          if (reg.active) {
+            reg.active.postMessage({
+              type: 'CLEAR_NOTIFICATION'
+            });
+          }
+        });
+      }
+    }
+
+    function updateSyncVisibility() {
+      const method = document.getElementById('syncMethod').value;
+      const group = document.getElementById('serverSettingsGroup');
+      if (group) {
+        group.style.display = (method === 'server' || method === 'both') ? 'block' : 'none';
+      }
+    }
+
+    function saveSyncSettingsUI() {
+      const method = document.getElementById('syncMethod').value;
+      localStorage.setItem('syncMethod', method);
+      localStorage.setItem('serverUrl', document.getElementById('serverUrl').value.trim());
+      localStorage.setItem('apiKey', document.getElementById('apiKey').value.trim());
+      alert("Synkinställningar sparade!");
+    }
+
+    function loadSyncSettingsUI() {
+      const savedMethod = localStorage.getItem('syncMethod') || 'cloud';
+      const selectEl = document.getElementById('syncMethod');
+      if (selectEl) selectEl.value = savedMethod;
+      
+      const urlEl = document.getElementById('serverUrl');
+      if (urlEl) urlEl.value = localStorage.getItem('serverUrl') || '';
+      
+      const keyEl = document.getElementById('apiKey');
+      if (keyEl) keyEl.value = localStorage.getItem('apiKey') || '';
+      
+      updateSyncVisibility();
+    }
+
+    async function syncToServer(data, serverUrl, apiKey) {
+      if (!serverUrl) {
+        throw new Error('Ingen server-URL angiven.');
+      }
+      const response = await fetch(serverUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey ? { 'X-API-Key': apiKey, 'Authorization': `Bearer ${apiKey}` } : {})
+        },
+        body: JSON.stringify(data)
+      });
+      if (!response.ok) {
+        throw new Error(`Serverfel: ${response.status} ${response.statusText}`);
+      }
+      return await response.json();
+    }
+
+    async function performSync(data, silent = true) {
+      const method = localStorage.getItem('syncMethod') || 'cloud';
+      let errors = [];
+      let successMsgs = [];
+
+      if (method === 'server' || method === 'both') {
+        try {
+          const url = localStorage.getItem('serverUrl');
+          const key = localStorage.getItem('apiKey');
+          await syncToServer(data, url, key);
+          successMsgs.push('Egen server');
+        } catch (err) {
+          console.error('Fel vid serversynk:', err);
+          errors.push('Server: ' + err.message);
+        }
+      }
+
+      if (!silent) {
+        if (errors.length > 0) {
+          alert('Synkronisering klar med varningar:\n- ' + errors.join('\n- '));
+        } else if (successMsgs.length > 0) {
+          alert('Synkronisering lyckades till: ' + successMsgs.join(', '));
+        } else {
+          alert('Ingen aktiv synkdestination utfördes.');
+        }
+      }
+    }
+
+    async function triggerManualSync() {
+      const backupObj = {
+        version: "5.12",
+        profileId: activeProfileId,
+        exportDate: new Date().toISOString(),
+        customers: getCustomers(),
+        entries: getTimeEntries(),
+        client: getClientInfo(),
+        schedule: getScheduleInfo()
+      };
+      await performSync(backupObj, false);
+    }
+
+    // Android-backup/export som använder Androids delningsmeny
+    async function selectAndroidBackupFolder() {
+      const backupObj = {
+        version: "5.12",
+        profileId: activeProfileId,
+        exportDate: new Date().toISOString(),
+        customers: getCustomers(),
+        entries: getTimeEntries(),
+        client: getClientInfo(),
+        schedule: getScheduleInfo()
+      };
+
+      const jsonString = JSON.stringify(backupObj, null, 2);
+      const filename = `tidsrapport_backup_${activeProfileId}_${new Date().toISOString().slice(0,10)}.json`;
+      
+      await saveOrShareFile(jsonString, filename, 'application/json');
+    }
+
+    function updateAppStatusIndicators(shift, clockText) {
+      const isRunning = shift && shift.status === 'working';
+      const isBreak = shift && shift.status === 'break';
+
+      if ('setAppBadge' in navigator && 'clearAppBadge' in navigator) {
+        if (isRunning || isBreak) {
+          navigator.setAppBadge().catch(() => {});
+        } else {
+          navigator.clearAppBadge().catch(() => {});
+        }
+      }
+
+      if (isRunning) {
+        document.title = `⏱️ ${clockText} - Arbetar`;
+      } else if (isBreak) {
+        document.title = `☕ ${clockText} - Rast`;
+      } else {
+        document.title = `Tidsrapportering & Avancerad Prissättning`;
+      }
+
+      const iconColor = isRunning ? '#16a34a' : (isBreak ? '#d97706' : '#2563eb');
+      updateDynamicFavicon(iconColor);
+    }
+
+    function updateDynamicFavicon(color) {
+      const favicon = document.getElementById('dynamic-favicon');
+      if (favicon) {
+        favicon.href = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="${encodeURIComponent(color)}"/><text x="50" y="68" font-size="55" text-anchor="middle" fill="white" font-family="sans-serif" font-weight="bold">T</text></svg>`;
+      }
+    }
+
+    function getClientInfo() {
+      const stored = localStorage.getItem(getStorageKey('app_client_info_v5'));
+      return stored ? JSON.parse(stored) : { name: '', email: '', phone: '', address: '' };
+    }
+
+    function saveClientInfo(e) {
+      if (e) e.preventDefault();
+      const client = {
+        name: document.getElementById('client-name').value.trim(),
+        email: document.getElementById('client-email').value.trim(),
+        phone: document.getElementById('client-phone').value.trim(),
+        address: document.getElementById('client-address').value.trim()
+      };
+      localStorage.setItem(getStorageKey('app_client_info_v5'), JSON.stringify(client));
+      alert("Användarens uppgifter har sparats!");
+    }
+
+    function loadClientInfoUI() {
+      const client = getClientInfo();
+      document.getElementById('client-name').value = client.name || '';
+      document.getElementById('client-email').value = client.email || '';
+      document.getElementById('client-phone').value = client.phone || '';
+      document.getElementById('client-address').value = client.address || '';
+    }
+
+    function toggleScheduleActiveState() {
+      const active = document.getElementById('enable-schedule-toggle').checked;
+      const container = document.getElementById('schedule-controls-container');
+      if (container) {
+        container.style.display = active ? 'block' : 'none';
+      }
+    }
+
+    function getScheduleInfo() {
+      const stored = localStorage.getItem(getStorageKey('app_schedule_info_v5'));
+      if (stored) return JSON.parse(stored);
+      
+      return {
+        enabled: true,
+        showWorkedTime: true,
+        calendarShifts: {}
+      };
+    }
+
+    function saveScheduleSettingsUI() {
+      const sched = getScheduleInfo();
+      const showToggle = document.getElementById('enable-show-worked-time');
+      if (showToggle) {
+        sched.showWorkedTime = showToggle.checked;
+        localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
+        renderScheduleCalendar();
+      }
+    }
+
+    function autoSaveEntryToCalendar(entry) {
+      const sched = getScheduleInfo();
+      if (!sched.calendarShifts) sched.calendarShifts = {};
+      const dateStr = entry.date;
+      if (!dateStr) return;
+
+      const customers = getCustomers();
+      const cust = customers.find(c => c.id === entry.customerId);
+      const custName = cust ? cust.name : 'Pass';
+
+      const start = entry.startTime || '08:00';
+      const end = entry.endTime || '17:00';
+      const breaks = entry.breaks || (entry.breakMin ? [{ start: '', end: '', durationMin: entry.breakMin }] : []);
+
+      sched.calendarShifts[dateStr] = {
+        start: start,
+        end: end,
+        breaks: breaks,
+        breakMin: entry.breakMin || 0,
+        note: `${custName}${entry.desc ? ' - ' + entry.desc : ''}`,
+        off: false,
+        isCompleted: true
+      };
+
+      localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
+      renderScheduleCalendar();
+      checkUpcomingShiftNotifications();
+    }
+
+    function renderScheduleCalendar() {
+      const grid = document.getElementById('calendar-grid');
+      const title = document.getElementById('calendar-month-title');
+      if (!grid || !title) return;
+
+      const sched = getScheduleInfo();
+      const showWorked = sched.showWorkedTime !== false;
+      const shifts = sched.calendarShifts || {};
+      const entries = getTimeEntries();
+
+      const showToggle = document.getElementById('enable-show-worked-time');
+      if (showToggle) {
+        showToggle.checked = showWorked;
+      }
+
+      const year = currentCalDate.getFullYear();
+      const month = currentCalDate.getMonth();
+
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "Maj", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"];
+      title.innerText = `${monthNames[month]} ${year}`;
+
+      grid.innerHTML = '';
+
+      const dayHeads = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"];
+      dayHeads.forEach(h => {
+        grid.innerHTML += `<div class="calendar-day-head">${h}</div>`;
+      });
+
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+
+      let startDayOfWeek = firstDay.getDay() - 1;
+      if (startDayOfWeek === -1) startDayOfWeek = 6;
+
+      const prevMonthLastDay = new Date(year, month, 0).getDate();
+
+      for (let i = startDayOfWeek - 1; i >= 0; i--) {
+        const d = prevMonthLastDay - i;
+        grid.innerHTML += `<div class="calendar-cell other-month"><span class="day-num">${d}</span></div>`;
+      }
+
+      const todayStr = new Date().toISOString().slice(0, 10);
+      for (let d = 1; d <= lastDay.getDate(); d++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const isToday = dateStr === todayStr;
+
+        let shift = shifts[dateStr];
+        let isCompletedWorked = false;
+
+        if (showWorked) {
+          const entryForDay = entries.find(e => e.date === dateStr);
+          if (entryForDay) {
+            const customers = getCustomers();
+            const cust = customers.find(c => c.id === entryForDay.customerId);
+            const custName = cust ? cust.name : 'Pass';
+            shift = {
+              start: entryForDay.startTime || '',
+              end: entryForDay.endTime || '',
+              breaks: entryForDay.breaks || [],
+              breakMin: entryForDay.breakMin || 0,
+              note: `${custName}${entryForDay.desc ? ' - ' + entryForDay.desc : ''}`,
+              off: false,
+              displayLabel: custName,
+              isCompleted: true
+            };
+            isCompletedWorked = true;
+          }
+        }
+
+        let shiftContent = '';
+        let offClass = '';
+
+        if (shift) {
+          if (shift.off) {
+            shiftContent = `<div class="shift-tag">Ledig</div>`;
+            offClass = ' off-day';
+          } else {
+            const label = shift.displayLabel || (shift.note ? shift.note.split(' - ')[0] : 'Pass');
+            
+            let breakText = '';
+            if (shift.breaks && shift.breaks.length > 0) {
+              const b = shift.breaks[0];
+              if (b.start && b.end) {
+                breakText = `☕ ${b.start}`;
+              } else if (shift.breakMin) {
+                breakText = `☕ ${shift.breakMin}m`;
+              }
+            } else if (shift.breakMin > 0) {
+              breakText = `☕ ${shift.breakMin}m`;
+            }
+
+            const plannedClass = (dateStr > todayStr && !isCompletedWorked) ? ' planned-shift' : '';
+
+            shiftContent = `
+              <div class="shift-tag${plannedClass}" title="${label}">${label}</div>
+              ${breakText ? `<div class="break-tag" title="Rast">${breakText}</div>` : ''}
+            `;
+          }
+        }
+
+        grid.innerHTML += `
+          <div class="calendar-cell ${isToday ? 'today' : ''}${offClass}" onclick="openScheduleDayModal('${dateStr}')">
+            <span class="day-num">${d}</span>
+            ${shiftContent}
+          </div>
+        `;
+      }
+
+      const totalCells = startDayOfWeek + lastDay.getDate();
+      const nextMonthDays = (7 - (totalCells % 7)) % 7;
+      for (let d = 1; d <= nextMonthDays; d++) {
+        grid.innerHTML += `<div class="calendar-cell other-month"><span class="day-num">${d}</span></div>`;
+      }
+    }
+
+    function navigateCalendarMonth(delta) {
+      currentCalDate.setMonth(currentCalDate.getMonth() + delta);
+      renderScheduleCalendar();
+    }
+
+    function addModalBreakRow(start = '', end = '') {
+      const container = document.getElementById('modal-break-rows-container');
+      const rowId = 'modal_break_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+      const div = document.createElement('div');
+      div.className = 'form-row modal-break-row-item';
+      div.id = rowId;
+      div.style.marginBottom = '6px';
+      div.innerHTML = `
+        <div class="form-group" style="margin-bottom:0;">
+          <input type="time" class="modal-break-start" value="${start}" style="padding: 8px; font-size: 14px;">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <input type="time" class="modal-break-end" value="${end}" style="padding: 8px; font-size: 14px;">
+        </div>
+        <div style="display:flex; align-items:center;">
+          <button type="button" class="btn btn-danger btn-sm" onclick="document.getElementById('${rowId}').remove();">✕</button>
+        </div>
+      `;
+      container.appendChild(div);
+    }
+
+    function openScheduleDayModal(dateStr) {
+      const modal = document.getElementById('schedule-day-modal');
+      const title = document.getElementById('schedule-modal-date-title');
+      
+      const sched = getScheduleInfo();
+      const shifts = sched.calendarShifts || {};
+      const entries = getTimeEntries();
+      
+      const entryForDay = entries.find(e => e.date === dateStr);
+      let currentShift = shifts[dateStr];
+
+      if (entryForDay) {
+        const customers = getCustomers();
+        const cust = customers.find(c => c.id === entryForDay.customerId);
+        const custName = cust ? cust.name : 'Pass';
+        currentShift = {
+          start: entryForDay.startTime || '07:00',
+          end: entryForDay.endTime || '16:00',
+          breaks: entryForDay.breaks || [],
+          note: `${custName}${entryForDay.desc ? ' - ' + entryForDay.desc : ''}`,
+          off: false
+        };
+      } else if (!currentShift) {
+        currentShift = { start: '07:00', end: '16:00', breaks: [], note: '', off: false };
+      }
+
+      document.getElementById('modal-sched-date').value = dateStr;
+      title.innerText = `Skift ${dateStr}`;
+
+      document.getElementById('modal-sched-off').checked = !!currentShift.off;
+      document.getElementById('modal-sched-start').value = currentShift.start || '07:00';
+      document.getElementById('modal-sched-end').value = currentShift.end || '16:00';
+      document.getElementById('modal-sched-note').value = currentShift.note || '';
+
+      const container = document.getElementById('modal-break-rows-container');
+      container.innerHTML = '';
+      if (currentShift.breaks && Array.isArray(currentShift.breaks) && currentShift.breaks.length > 0) {
+        currentShift.breaks.forEach(b => addModalBreakRow(b.start, b.end));
+      } else if (currentShift.breakStart && currentShift.breakEnd) {
+        addModalBreakRow(currentShift.breakStart, currentShift.breakEnd);
+      }
+
+      toggleModalDayInputs();
+      modal.showModal();
+    }
+
+    function closeScheduleDayModal() {
+      document.getElementById('schedule-day-modal').close();
+    }
+
+    function deleteScheduleDayModal() {
+      const dateStr = document.getElementById('modal-sched-date').value;
+      if (!dateStr) return;
+
+      if (confirm(`Vill du ta bort passet för ${dateStr}?`)) {
+        const sched = getScheduleInfo();
+        if (sched.calendarShifts && sched.calendarShifts[dateStr]) {
+          delete sched.calendarShifts[dateStr];
+          localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
+        }
+
+        let entries = getTimeEntries();
+        const newEntries = entries.filter(e => e.date !== dateStr);
+        if (newEntries.length !== entries.length) {
+          saveTimeEntries(newEntries);
+        }
+
+        closeScheduleDayModal();
+        renderScheduleCalendar();
+      }
+    }
+
+    function toggleModalDayInputs() {
+      const isOff = document.getElementById('modal-sched-off').checked;
+      document.getElementById('modal-sched-times-group').style.display = isOff ? 'none' : 'block';
+    }
+
+    function saveScheduleDayModal(e) {
+      if (e) e.preventDefault();
+      const dateStr = document.getElementById('modal-sched-date').value;
+      const isOff = document.getElementById('modal-sched-off').checked;
+      const start = document.getElementById('modal-sched-start').value;
+      const end = document.getElementById('modal-sched-end').value;
+      const note = document.getElementById('modal-sched-note').value.trim();
+
+      const breakRows = [];
+      let totalBreakMins = 0;
+      document.querySelectorAll('.modal-break-row-item').forEach(row => {
+        const s = row.querySelector('.modal-break-start').value;
+        const endB = row.querySelector('.modal-break-end').value;
+        if (s || endB) {
+          breakRows.push({ start: s, end: endB });
+          if (s && endB) {
+            const [sh, sm] = s.split(':').map(Number);
+            const [eh, em] = endB.split(':').map(Number);
+            let diff = (eh * 60 + em) - (sh * 60 + sm);
+            if (diff > 0) totalBreakMins += diff;
+          }
+        }
+      });
+
+      const sched = getScheduleInfo();
+      if (!sched.calendarShifts) sched.calendarShifts = {};
+
+      sched.calendarShifts[dateStr] = { start, end, breaks: breakRows, breakMin: totalBreakMins, note, off: isOff };
+
+      localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
+      closeScheduleDayModal();
+      renderScheduleCalendar();
+      checkUpcomingShiftNotifications();
+    }
+
+    function loadScheduleInfoUI() {
+      const sched = getScheduleInfo();
+      const toggle = document.getElementById('enable-schedule-toggle');
+      if (toggle) {
+        toggle.checked = sched.enabled !== false;
+        toggleScheduleActiveState();
+      }
+
+      const showToggle = document.getElementById('enable-show-worked-time');
+      if (showToggle) {
+        showToggle.checked = sched.showWorkedTime !== false;
+      }
+
+      renderScheduleCalendar();
+    }
+
+    function importIcsCalendar(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const text = e.target.result;
+        const events = parseIcsContent(text);
+
+        if (events.length === 0) {
+          alert("Inga giltiga skift hittades i den valda filen.");
+          return;
+        }
+
+        const sched = getScheduleInfo();
+        if (!sched.calendarShifts) sched.calendarShifts = {};
+
+        let importedCount = 0;
+        events.forEach(ev => {
+          if (ev.startDateStr && ev.startTimeStr && ev.endTimeStr) {
+            sched.calendarShifts[ev.startDateStr] = {
+              start: ev.startTimeStr,
+              end: ev.endTimeStr,
+              breaks: [{ start: '12:00', end: '12:30' }],
+              breakMin: 30,
+              note: '',
+              off: false
+            };
+            importedCount++;
+          }
+        });
+
+        localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
+        renderScheduleCalendar();
+        checkUpcomingShiftNotifications();
+        alert(`Lyckades importera ${importedCount} skift till kalendern!`);
+      };
+      reader.readAsText(file);
+    }
+
+    function parseIcsContent(icsText) {
+      const events = [];
+      const lines = icsText.split(/\r\n|\n|\r/);
+      let inEvent = false;
+      let currentEvent = {};
+
+      lines.forEach(line => {
+        if (line.startsWith('BEGIN:VEVENT')) {
+          inEvent = true;
+          currentEvent = {};
+        } else if (line.startsWith('END:VEVENT')) {
+          inEvent = false;
+          if (currentEvent.start) {
+            const startParsed = parseIcsDateTime(currentEvent.start);
+            const endParsed = currentEvent.end ? parseIcsDateTime(currentEvent.end) : null;
+
+            if (startParsed) {
+              events.push({
+                startDateStr: startParsed.dateStr,
+                startTimeStr: startParsed.timeStr,
+                endTimeStr: endParsed ? endParsed.timeStr : '17:00'
+              });
+            }
+          }
+        } else if (inEvent) {
+          if (line.startsWith('DTSTART')) {
+            currentEvent.start = line.split(':')[1];
+          } else if (line.startsWith('DTEND')) {
+            currentEvent.end = line.split(':')[1];
+          }
+        }
+      });
+
+      return events;
+    }
+
+    function parseIcsDateTime(icsDtStr) {
+      if (!icsDtStr) return null;
+      const clean = icsDtStr.replace(/[^0-9T]/g, '');
+      if (clean.length < 8) return null;
+
+      const y = clean.substring(0, 4);
+      const m = clean.substring(4, 6);
+      const d = clean.substring(6, 8);
+      const dateStr = `${y}-${m}-${d}`;
+
+      let timeStr = '08:00';
+      if (clean.includes('T') && clean.length >= 13) {
+        const tIdx = clean.indexOf('T');
+        const hh = clean.substring(tIdx + 1, tIdx + 3);
+        const mm = clean.substring(tIdx + 3, tIdx + 5);
+        timeStr = `${hh}:${mm}`;
+      }
+
+      return { dateStr, timeStr };
+    }
+
+    function calculateRequiredRest() {
+      const entries = getTimeEntries();
+      const output = document.getElementById('rest-calculator-output');
+      if (!output) return;
+
+      if (entries.length === 0) {
+        output.innerHTML = '<p style="margin:0; color:var(--text-muted);">Inga registrerade pass ännu. Stämpla eller lägg till pass för att se beräknat vilobehov.</p>';
+        return;
+      }
+
+      const sorted = [...entries].sort((a, b) => {
+        const dateA = new Date(`${a.date}T${a.startTime || '00:00'}`);
+        const dateB = new Date(`${b.date}T${b.startTime || '00:00'}`);
+        return dateA - dateB;
+      });
+      const lastEntry = sorted[sorted.length - 1];
+
+      let nextAllowedStartText = '';
+      if (lastEntry.date && lastEntry.endTime && lastEntry.startTime) {
+        const start = new Date(`${lastEntry.date}T${lastEntry.startTime}`);
+        let lastEnd = new Date(`${lastEntry.date}T${lastEntry.endTime}`);
+        if (lastEnd < start) {
+          lastEnd.setDate(lastEnd.getDate() + 1);
+        }
+        
+        const earl11 = new Date(lastEnd.getTime() + 11 * 60 * 60 * 1000);
+        const earl9 = new Date(lastEnd.getTime() + 9 * 60 * 60 * 1000);
+
+        const formatTime = (d) => d.toLocaleDateString('sv-SE', { weekday: 'short', month: 'numeric', day: 'numeric' }) + ' kl ' + d.toTimeString().slice(0, 5);
+
+        nextAllowedStartText = `
+          <p style="margin-top:0; margin-bottom:8px;"><strong>🌙 Dygnsvila efter senaste passet (${lastEntry.date}):</strong></p>
+          <ul style="padding-left: 20px; margin-bottom: 12px;">
+            <li><strong>Ordinarie Dygnsvila (11h):</strong> Nästa pass får starta tidigast <strong>${formatTime(earl11)}</strong>.</li>
+            <li><strong>Reducerad Dygnsvila (9h):</strong> Får starta tidigast <strong>${formatTime(earl9)}</strong> (max 3 reducerade vilor mellan två veckovilor).</li>
+          </ul>
+        `;
+      }
+
+      const now = new Date();
+      const startOfWeek = new Date(now);
+      const day = startOfWeek.getDay() || 7;
+      startOfWeek.setHours(0, 0, 0, 0);
+      startOfWeek.setDate(startOfWeek.getDate() - day + 1);
+
+      let weeklyWorkedMins = 0;
+      sorted.forEach(e => {
+        if (!e.date) return;
+        const eDate = new Date(e.date);
+        if (eDate >= startOfWeek) {
+          weeklyWorkedMins += ((parseFloat(e.hours) || 0) * 60);
+        }
+      });
+
+      const weeklyHours = (weeklyWorkedMins / 60).toFixed(2);
+
+      output.innerHTML = `
+        ${nextAllowedStartText}
+        <p style="margin-top:0; margin-bottom:8px;"><strong>📅 Veckostatus & Veckovila (EG 561/2006 & Vägarbetstid):</strong></p>
+        <ul style="padding-left: 20px; margin: 0;">
+          <li><strong>Arbetad tid denna vecko-period:</strong> <strong>${weeklyHours} h</strong> (Absolut max 60h/vecko-tak enligt Vägarbetstidslagen).</li>
+          <li><strong>Ordinarie Helgvila:</strong> Minst <strong>45 timmar</strong> sammanhängande vila.</li>
+          <li><strong>Reducerad Helgvila:</strong> Får minskas till lägst <strong>24 timmar</strong>, men kräver att du kompenserar med <strong>21h sammanhängande vila</strong> innan slutet av den 3:e veckan.</li>
+        </ul>
+      `;
+    }
+
+    function getCustomers() {
+      const stored = localStorage.getItem(getStorageKey('app_customers_v5'));
+      if (!stored) {
+        saveCustomers(DEFAULT_CUSTOMERS);
+        return DEFAULT_CUSTOMERS;
+      }
+      return JSON.parse(stored);
+    }
+
+    function saveCustomers(data) {
+      localStorage.setItem(getStorageKey('app_customers_v5'), JSON.stringify(data));
+      populateCustomerDropdowns();
+      renderCustomerList();
+      renderTimeEntries();
+    }
+
+    function getTimeEntries() {
+      const stored = localStorage.getItem(getStorageKey('app_time_entries_v5'));
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    function saveTimeEntries(data) {
+      localStorage.setItem(getStorageKey('app_time_entries_v5'), JSON.stringify(data));
+      renderTimeEntries();
+      calculateRequiredRest();
+      renderScheduleCalendar();
+    }
+
+    function safeNum(val, defaultVal = 0) {
+      const n = parseFloat(val);
+      return (!isNaN(n) && isFinite(n)) ? n : defaultVal;
+    }
+
+    function clearAllEntries() {
+      if (confirm("Vill du rensa alla sparade pass permanent för denna användare?")) {
+        localStorage.removeItem(getStorageKey('app_time_entries_v5'));
+        renderTimeEntries();
+        calculateRequiredRest();
+        renderScheduleCalendar();
+        alert("Alla pass har rensats.");
+      }
+    }
+
+    function getActiveShift() {
+      const stored = localStorage.getItem(getStorageKey('app_active_shift_v5'));
+      return stored ? JSON.parse(stored) : null;
+    }
+
+    function setActiveShift(shift) {
+      if (shift) {
+        localStorage.setItem(getStorageKey('app_active_shift_v5'), JSON.stringify(shift));
+      } else {
+        localStorage.removeItem(getStorageKey('app_active_shift_v5'));
+        alarmStateMap = {};
+        clearBackgroundNotification();
+      }
+      updateTimerUI();
+    }
+
+    async function saveOrShareFile(content, filename, mimeType) {
+      const file = new File([content], filename, { type: mimeType });
+
+      if ('showSaveFilePicker' in window) {
+        try {
+          const ext = '.' + filename.split('.').pop();
+          const handle = await window.showSaveFilePicker({
+            suggestedName: filename,
+            types: [{ description: 'Exportfil', accept: { [mimeType]: [ext] } }]
+          });
+          const writable = await handle.createWritable();
+          await writable.write(content);
+          await writable.close();
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
+      }
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: filename });
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
+      }
+
+      const url = URL.createObjectURL(file);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function populateCustomerDropdowns() {
+      const customers = getCustomers();
+      const liveSel = document.getElementById('live-customer');
+      const timeSel = document.getElementById('time-customer');
+      const exportSel = document.getElementById('export-customer-select');
+
+      liveSel.innerHTML = '<option value="">Välj kund för stämpling...</option>';
+      timeSel.innerHTML = '<option value="">Välj kund...</option>';
+      exportSel.innerHTML = '<option value="all">Alla kunder</option>';
+
+      customers.forEach(c => {
+        liveSel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+        timeSel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+        exportSel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+      });
+    }
+
+    async function startShift() {
+      const customerId = document.getElementById('live-customer').value;
+      if (!customerId) {
+        alert('Välj en kund först!');
+        return;
+      }
+
+      await requestNotificationPermission();
+
+      const breakDuration = parseInt(document.getElementById('live-break-duration').value, 10) || 0;
+      const shift = {
+        customerId,
+        startTime: Date.now(),
+        breakTimeMs: 0,
+        breakStart: null,
+        breaks: [],
+        status: 'working',
+        breakTargetMins: breakDuration
+      };
+
+      alarmStateMap = {};
+      setActiveShift(shift);
+    }
+
+    function toggleBreak() {
+      const shift = getActiveShift();
+      if (!shift) return;
+
+      if (shift.status === 'working') {
+        shift.status = 'break';
+        shift.breakStart = Date.now();
+      } else if (shift.status === 'break') {
+        shift.status = 'working';
+        const breakEnd = Date.now();
+        const breakDurationMs = breakEnd - shift.breakStart;
+        shift.breakTimeMs += breakDurationMs;
+
+        if (!shift.breaks) shift.breaks = [];
+        shift.breaks.push({
+          start: new Date(shift.breakStart).toTimeString().slice(0, 5),
+          end: new Date(breakEnd).toTimeString().slice(0, 5)
+        });
+
+        shift.breakStart = null;
+      }
+
+      setActiveShift(shift);
+    }
+
+    function stopShift() {
+      const shift = getActiveShift();
+      if (!shift) return;
+
+      let totalBreakMs = shift.breakTimeMs;
+      let breaksList = shift.breaks ? [...shift.breaks] : [];
+
+      if (shift.status === 'break' && shift.breakStart) {
+        const breakEnd = Date.now();
+        totalBreakMs += (breakEnd - shift.breakStart);
+        breaksList.push({
+          start: new Date(shift.breakStart).toTimeString().slice(0, 5),
+          end: new Date(breakEnd).toTimeString().slice(0, 5)
+        });
+      }
+
+      const startDate = new Date(shift.startTime);
+      const endDate = new Date();
+
+      const dateStr = startDate.toISOString().slice(0, 10);
+      const startTimeStr = startDate.toTimeString().slice(0, 5);
+      const endTimeStr = endDate.toTimeString().slice(0, 5);
+      const breakMinutes = Math.round(totalBreakMs / (1000 * 60));
+
+      const workedMs = Math.max(0, (endDate - startDate) - totalBreakMs);
+      const workedHours = Number((workedMs / (1000 * 60 * 60)).toFixed(2));
+
+      const entries = getTimeEntries();
+      const newEntry = {
+        id: 'entry_' + Date.now(),
+        customerId: shift.customerId,
+        date: dateStr,
+        startTime: startTimeStr,
+        endTime: endTimeStr,
+        hours: workedHours,
+        breakMin: breakMinutes,
+        breaks: breaksList,
+        desc: 'Stämplat pass'
+      };
+
+      entries.unshift(newEntry);
+      saveTimeEntries(entries);
+      autoSaveEntryToCalendar(newEntry);
+
+      setActiveShift(null);
+      alert(`Passet avslutat och sparat! (${workedHours} h arbetad tid)`);
+    }
+
+    function updateTimerUI() {
+      const shift = getActiveShift();
+      const badge = document.getElementById('timer-badge');
+      const clock = document.getElementById('timer-clock');
+      const subtext = document.getElementById('timer-subtext');
+      const btnStart = document.getElementById('btn-start');
+      const btnBreak = document.getElementById('btn-break');
+      const btnStop = document.getElementById('btn-stop');
+      const custGroup = document.getElementById('live-customer-group');
+      const breakOptsGroup = document.getElementById('break-options-group');
+      const complianceBox = document.getElementById('compliance-box');
+      const topStatusText = document.getElementById('top-status-text');
+      const topStatusBar = document.getElementById('top-status-bar');
+
+      if (!shift) {
+        badge.className = 'status-badge status-idle';
+        badge.innerText = 'Ej inloggad';
+        clock.innerText = '00:00:00';
+        subtext.innerText = 'Välj kund och starta passet';
+
+        btnStart.style.display = 'inline-flex';
+        btnBreak.style.display = 'none';
+        btnStop.style.display = 'none';
+        custGroup.style.display = 'block';
+        breakOptsGroup.style.display = 'block';
+        complianceBox.style.display = 'none';
+
+        topStatusBar.className = 'top-status-bar';
+        topStatusText.innerText = '⏹ Ingen tidtagning igång';
+
+        updateAppStatusIndicators(null, '');
+        clearBackgroundNotification();
+
+        if (timerInterval) clearInterval(timerInterval);
+        return;
+      }
+
+      custGroup.style.display = 'none';
+      breakOptsGroup.style.display = 'none';
+      btnStart.style.display = 'none';
+      btnBreak.style.display = 'inline-flex';
+      btnStop.style.display = 'inline-flex';
+
+      const cust = getCustomers().find(c => c.id === shift.customerId);
+      const custName = cust ? cust.name : 'Okänd kund';
+
+      if (shift.status === 'working') {
+        badge.className = 'status-badge status-working';
+        badge.innerText = `Arbetar (${custName})`;
+        btnBreak.innerText = '☕ Starta rast';
+        topStatusBar.className = 'top-status-bar status-active-working';
+      } else {
+        badge.className = 'status-badge status-break';
+        badge.innerText = `Rast (${custName})`;
+        btnBreak.innerText = '▶ Avsluta rast';
+        topStatusBar.className = 'top-status-bar status-active-break';
+      }
+
+      function tick() {
+        const currentShift = getActiveShift() || shift;
+
+        let currentWorkedMs = Date.now() - currentShift.startTime - currentShift.breakTimeMs;
+        if (currentShift.status === 'break' && currentShift.breakStart) {
+          currentWorkedMs = currentShift.breakStart - currentShift.startTime - currentShift.breakTimeMs;
+        }
+
+        const sec = Math.floor((Math.max(0, currentWorkedMs) / 1000) % 60);
+        const min = Math.floor((Math.max(0, currentWorkedMs) / (1000 * 60)) % 60);
+        const hrs = Math.floor(Math.max(0, currentWorkedMs) / (1000 * 60 * 60));
+        const clockText = String(hrs).padStart(2, '0') + ':' + String(min).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+
+        clock.innerText = clockText;
+
+        if (currentShift.status === 'working') {
+          subtext.innerText = `Startat kl ${new Date(currentShift.startTime).toTimeString().slice(0,5)}`;
+          topStatusText.innerText = `⏱️ ARBETAR: ${custName} (${clockText})`;
+          updateAppStatusIndicators(currentShift, clockText);
+          updateBackgroundNotification(`⏱️ Arbetar på ${custName}`, `Arbetad tid: ${clockText}`, true, false);
+        } else if (currentShift.status === 'break') {
+          const elapsedBreakMs = Date.now() - currentShift.breakStart;
+          const bSec = Math.floor((elapsedBreakMs / 1000) % 60);
+          const bMin = Math.floor((elapsedBreakMs / (1000 * 60)) % 60);
+          const breakClockText = String(bMin).padStart(2, '0') + ':' + String(bSec).padStart(2, '0');
+          
+          subtext.innerText = `På rast sedan ${new Date(currentShift.breakStart).toTimeString().slice(0,5)} (${breakClockText})`;
+          topStatusText.innerText = `☕ RAST: ${custName} (Rast: ${breakClockText})`;
+          updateAppStatusIndicators(currentShift, clockText);
+          updateBackgroundNotification(`☕ Rast på ${custName}`, `Rasttid: ${breakClockText}`, true, true);
+        }
+      }
+
+      tick();
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(tick, 1000);
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        updateTimerUI();
+      }
+    });
+
+    function autoCalculateHours() {
+      const startTime = document.getElementById('time-start').value;
+      const endTime = document.getElementById('time-end').value;
+      const breakMin = parseInt(document.getElementById('time-break').value, 10) || 0;
+
+      if (startTime && endTime) {
+        const dateStr = document.getElementById('time-date').value || '2026-01-01';
+        const start = new Date(`${dateStr}T${startTime}`);
+        let end = new Date(`${dateStr}T${endTime}`);
+        if (end < start) end.setDate(end.getDate() + 1);
+
+        let diffMins = (end - start) / (1000 * 60) - breakMin;
+        diffMins = Math.max(0, diffMins);
+        document.getElementById('time-hours').value = Number((diffMins / 60).toFixed(2));
+      }
+    }
+
+    function resetTimeForm() {
+      document.getElementById('time-form').reset();
+      document.getElementById('entry-edit-id').value = '';
+      document.getElementById('break-rows-container').innerHTML = '';
+      document.getElementById('total-break-display').innerText = '0';
+      document.getElementById('time-date').valueAsDate = new Date();
+      document.getElementById('time-break').value = "0";
+      document.getElementById('form-title').innerText = 'Spara pass';
+      document.getElementById('btn-save-entry').innerText = 'Spara tidssegment';
+      document.getElementById('btn-cancel-edit').style.display = 'none';
+    }
+
+    document.getElementById('time-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const editId = document.getElementById('entry-edit-id').value;
+      const customerId = document.getElementById('time-customer').value;
+      const date = document.getElementById('time-date').value;
+      const startTime = document.getElementById('time-start').value || '';
+      const endTime = document.getElementById('time-end').value || '';
+      const hours = safeNum(document.getElementById('time-hours').value);
+      const breakMin = parseInt(document.getElementById('time-break').value, 10) || 0;
+      const breaks = getBreaksFromForm();
+      const desc = document.getElementById('time-desc').value.trim();
+
+      let entries = getTimeEntries();
+      let entryObj;
+      if (editId) {
+        const idx = entries.findIndex(e => e.id === editId);
+        if (idx >= 0) {
+          entries[idx] = { id: editId, customerId, date, startTime, endTime, hours, breakMin, breaks, desc };
+          entryObj = entries[idx];
+        }
+      } else {
+        entryObj = { id: 'entry_' + Date.now(), customerId, date, startTime, endTime, hours, breakMin, breaks, desc };
+        entries.unshift(entryObj);
+      }
+
+      saveTimeEntries(entries);
+      if (entryObj) autoSaveEntryToCalendar(entryObj);
+      
+      resetTimeForm();
+      alert('Tidssegment sparat!');
+    });
+
+    function calculateEntryCost(entry, customer) {
+      if (!customer || !entry) return { totalHours: 0, cost: 0, obHours: 0, obCost: 0, breakMin: 0, obTypeLabel: '' };
+
+      const breakMin = parseInt(entry.breakMin, 10) || 0;
+      let totalHours = safeNum(entry.hours);
+
+      const rate = safeNum(customer.hourly_rate);
+      let cost = totalHours * rate;
+      
+      let obHours = 0;
+      let obCost = 0;
+      let obTypeLabel = '';
+
+      if (customer.ob_enabled && totalHours > 0) {
+        const dateStr = entry.date || '2026-01-01';
+        const start = entry.startTime ? new Date(`${dateStr}T${entry.startTime}`) : new Date(dateStr);
+        const dayOfWeek = start.getDay();
+        const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+
+        if (isWeekend && customer.ob_weekend_enabled) {
+          obHours = totalHours;
+          obTypeLabel = 'Helg-OB';
+          if (customer.ob_weekend_rate_type === 'multiplier') {
+            const factor = safeNum(customer.ob_weekend_rate_value, 1);
+            cost = totalHours * rate * factor;
+            obCost = totalHours * rate * (factor - 1);
+          } else {
+            const addon = safeNum(customer.ob_weekend_rate_value);
+            cost = totalHours * (rate + addon);
+            obCost = totalHours * addon;
+          }
+        } else if (entry.startTime) {
+          const obStartHr = parseInt((customer.ob_start_time || '18:00').split(':')[0], 10);
+          const startHr = start.getHours();
+
+          if (startHr >= obStartHr || startHr < 6) {
+            obHours = totalHours;
+            obTypeLabel = 'Vardags-OB';
+            if (customer.ob_rate_type === 'multiplier') {
+              const factor = safeNum(customer.ob_rate_value, 1);
+              cost = totalHours * rate * factor;
+              obCost = totalHours * rate * (factor - 1);
+            } else {
+              const addon = safeNum(customer.ob_rate_value);
+              cost = totalHours * (rate + addon);
+              obCost = totalHours * addon;
+            }
+          }
+        }
+      }
+
+      return {
+        totalHours: safeNum(totalHours.toFixed(2)),
+        cost: Math.round(safeNum(cost)),
+        obHours: safeNum(obHours.toFixed(2)), 
+        obCost: Math.round(safeNum(obCost)),
+        breakMin: breakMin,
+        obTypeLabel: obTypeLabel
+      };
+    }
+
+    function editEntry(id) {
+      const entry = getTimeEntries().find(e => e.id === id);
+      if (!entry) return;
+      document.getElementById('entry-edit-id').value = entry.id;
+      document.getElementById('time-customer').value = entry.customerId;
+      document.getElementById('time-date').value = entry.date;
+      document.getElementById('time-start').value = entry.startTime || '';
+      document.getElementById('time-end').value = entry.endTime || '';
+      document.getElementById('time-hours').value = entry.hours || '';
+      document.getElementById('time-break').value = entry.breakMin || 0;
+      document.getElementById('total-break-display').innerText = entry.breakMin || 0;
+      
+      const container = document.getElementById('break-rows-container');
+      container.innerHTML = '';
+      if (entry.breaks && Array.isArray(entry.breaks)) {
+        entry.breaks.forEach(b => addBreakRow(b.start, b.end));
+      }
+
+      document.getElementById('time-desc').value = entry.desc || '';
+      document.getElementById('form-title').innerText = 'Redigera pass';
+      document.getElementById('btn-save-entry').innerText = 'Uppdatera pass';
+      document.getElementById('btn-cancel-edit').style.display = 'inline-flex';
+      window.scrollTo({ top: 300, behavior: 'smooth' });
+    }
+
+    function deleteEntry(id) {
+      if (!confirm('Vill du ta bort detta pass?')) return;
+      saveTimeEntries(getTimeEntries().filter(e => e.id !== id));
+    }
+
+    function renderTimeEntries() {
+      const entries = getTimeEntries();
+      const customers = getCustomers();
+      const listContainer = document.getElementById('time-list');
+      const overviewContainer = document.getElementById('monthly-overview');
+      listContainer.innerHTML = '';
+      overviewContainer.innerHTML = '';
+
+      if (entries.length === 0) {
+        listContainer.innerHTML = '<div class="card" style="text-align:center; color: var(--text-muted);">Inga sparade pass ännu.</div>';
+        return;
+      }
+
+      let grandTotalHours = 0;
+      let grandTotalCost = 0;
+
+      entries.forEach(entry => {
+        const cust = customers.find(c => c.id === entry.customerId);
+        const calc = calculateEntryCost(entry, cust);
+        grandTotalHours += calc.totalHours;
+        grandTotalCost += calc.cost;
+      });
+
+      entries.slice(0, 15).forEach(entry => {
+        const cust = customers.find(c => c.id === entry.customerId);
+        const calc = calculateEntryCost(entry, cust);
+        
+        let breaksText = '';
+        if (entry.breaks && entry.breaks.length > 0) {
+          const bStrs = entry.breaks.map(b => `${b.start || '??'}–${b.end || '??'}`).join(', ');
+          breaksText = `<div style="font-size:12px; color:var(--warning); margin-top:4px;">☕ Raster: ${bStrs} (${calc.breakMin} min)</div>`;
+        } else if (calc.breakMin > 0) {
+          breaksText = `<div style="font-size:12px; color:var(--text-muted); margin-top:4px;">☕ Rast: ${calc.breakMin} min</div>`;
+        }
+
+        let obDisplay = '';
+        if (calc.obCost > 0) {
+          obDisplay = `<span style="color:var(--warning); font-size:13px;">(varav ${calc.obTypeLabel}: +${calc.obCost.toLocaleString('sv-SE')} kr)</span>`;
+        }
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div>
+              <strong style="font-size:16px;">${cust ? cust.name : 'Okänd kund'}</strong>
+              <div style="font-size:13px; color:var(--text-muted);">${entry.date || ''} ${entry.startTime ? `(${entry.startTime}–${entry.endTime})` : ''}</div>
+            </div>
+            <div>
+              <button class="btn btn-secondary btn-sm" onclick="editEntry('${entry.id}')">✏️</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteEntry('${entry.id}')">✕</button>
+            </div>
+          </div>
+          <div style="margin-top:10px; font-size:14px;">
+            <span>⏱️ Tid: <strong>${calc.totalHours} h</strong></span> | 
+            <span>💰 Summa: <strong>${calc.cost.toLocaleString('sv-SE')} kr</strong> ${obDisplay}</span>
+          </div>
+          ${breaksText}
+          ${entry.desc ? `<div style="font-size:13px; color:var(--text-muted); margin-top:6px;">📝 ${entry.desc}</div>` : ''}
+        `;
+        listContainer.appendChild(card);
+      });
+
+      const summaryCard = document.createElement('div');
+      summaryCard.className = 'card';
+      summaryCard.style.background = '#1e293b';
+      summaryCard.style.color = '#fff';
+      summaryCard.style.marginTop = '16px';
+      summaryCard.innerHTML = `
+        <h3 style="margin:0 0 8px 0; font-size:16px; color:#38bdf8;">📊 Total sammanställning</h3>
+        <div style="display:flex; justify-content:space-between; font-size:15px; margin-top:6px;">
+          <span>Total arbetstid: <strong>${Number(grandTotalHours.toFixed(2))} h</strong></span>
+          <span>Totalsumma: <strong>${Math.round(grandTotalCost).toLocaleString('sv-SE')} kr</strong></span>
+        </div>
+      `;
+      listContainer.appendChild(summaryCard);
+    }
+
+    function clearExportFilters() {
+      document.getElementById('export-customer-select').value = 'all';
+      document.getElementById('export-from-date').value = '';
+      document.getElementById('export-to-date').value = '';
+    }
+
+    function getFilteredEntriesForExport() {
+      const entries = getTimeEntries();
+      const custFilter = document.getElementById('export-customer-select').value;
+      const fromDate = document.getElementById('export-from-date').value;
+      const toDate = document.getElementById('export-to-date').value;
+
+      return entries.filter(e => {
+        if (custFilter !== 'all' && e.customerId !== custFilter) return false;
+        if (fromDate && e.date < fromDate) return false;
+        if (toDate && e.date > toDate) return false;
+        return true;
+      });
+    }
+
+    function buildMonthlySummaryMap(filteredEntries) {
+      const customers = getCustomers();
+      const summaryMap = {};
+
+      filteredEntries.forEach(e => {
+        const cust = customers.find(c => c.id === e.customerId);
+        const custName = cust ? cust.name : 'Okänd';
+        
+        if (!summaryMap[custName]) {
+          summaryMap[custName] = { 
+            customer: cust,
+            totalHours: 0, 
+            obHours: 0,
+            weekdayObHours: 0, 
+            weekdayObCost: 0, 
+            weekendObHours: 0, 
+            weekendObCost: 0, 
+            rawCost: 0 
+          };
+        }
+
+        const calc = calculateEntryCost(e, cust);
+        summaryMap[custName].totalHours += calc.totalHours;
+
+        if (calc.obCost > 0 || calc.obHours > 0) {
+          summaryMap[custName].obHours += calc.obHours;
+          if (calc.obTypeLabel === 'Helg-OB') {
+            summaryMap[custName].weekendObHours += calc.obHours;
+            summaryMap[custName].weekendObCost += calc.obCost;
+          } else {
+            summaryMap[custName].weekdayObHours += calc.obHours;
+            summaryMap[custName].weekdayObCost += calc.obCost;
+          }
+        }
+        summaryMap[custName].rawCost += calc.cost;
+      });
+
+      Object.keys(summaryMap).forEach(name => {
+        const item = summaryMap[name];
+        const cust = item.customer;
+        
+        item.regularHours = item.totalHours;
+        item.otHours = 0;
+        item.otAddonCost = 0;
+        item.finalTotalCost = item.rawCost;
+
+        if (cust && cust.ot_enabled) {
+          const cap = safeNum(cust.ot_monthly_cap, 160);
+          if (item.totalHours > cap) {
+            item.regularHours = cap;
+            item.otHours = Number((item.totalHours - cap).toFixed(2));
+
+            const rate = safeNum(cust.hourly_rate);
+            const otType = cust.ot_rate_type || 'multiplier';
+            const otVal = safeNum(cust.ot_simple_value, 1.5);
+
+            if (otType === 'multiplier') {
+              item.otAddonCost = Math.round(item.otHours * rate * (otVal - 1));
+            } else if (otType === 'addon') {
+              item.otAddonCost = Math.round(item.otHours * otVal);
+            } else if (otType === 'fixed_rate') {
+              item.otAddonCost = Math.round(item.otHours * (otVal - rate));
+            }
+            item.finalTotalCost = item.rawCost + item.otAddonCost;
+          }
+        }
+      });
+
+      return summaryMap;
+    }
+
+    async function exportExcel() {
+      if (typeof XLSX === 'undefined') {
+        alert("Excel-biblioteket kunde inte laddas.");
+        return;
+      }
+      const filtered = getFilteredEntriesForExport();
+      const customers = getCustomers();
+      if (filtered.length === 0) { alert('Inga pass att exportera.'); return; }
+
+      const sheetData = [
+        ["Datum", "Kund", "Starttid", "Sluttid", "Rasttider", "Obetald rast (min)", "Betald tid (h)", "Timpris (kr)", "OB-typ", "OB-tid (h)", "OB-tillägg (kr)", "Beskrivning", "Totalt (kr)"]
+      ];
+
+      filtered.forEach(e => {
+        const cust = customers.find(c => c.id === e.customerId);
+        const calc = calculateEntryCost(e, cust);
+        const breaksStr = e.breaks && e.breaks.length > 0 ? e.breaks.map(b => `${b.start || '??'}–${b.end || '??'}`).join(', ') : '-';
+        sheetData.push([
+          e.date || '',
+          cust ? cust.name : 'Okänd',
+          e.startTime || '',
+          e.endTime || '',
+          breaksStr,
+          calc.breakMin,
+          calc.totalHours,
+          cust ? cust.hourly_rate : 0,
+          calc.obTypeLabel || '-',
+          calc.obHours,
+          calc.obCost,
+          e.desc || '',
+          calc.cost
+        ]);
+      });
+
+      const summaryMap = buildMonthlySummaryMap(filtered);
+
+      const summaryData = [
+        ["Kund", "Total tid (h)", "OB-tid (h)", "OB (kr)", "OB1 / Helg-OB (kr)", "Övertidstillägg (kr)", "Total summa (kr)"]
+      ];
+      Object.keys(summaryMap).forEach(name => {
+        const s = summaryMap[name];
+        summaryData.push([
+          name,
+          Number(s.totalHours.toFixed(2)),
+          Number(s.obHours.toFixed(2)),
+          Math.round(s.weekdayObCost),
+          Math.round(s.weekendObCost),
+          Math.round(s.otAddonCost),
+          Math.round(s.finalTotalCost)
+        ]);
+      });
+
+      const wb = XLSX.utils.book_new();
+      const ws1 = XLSX.utils.aoa_to_sheet(sheetData);
+      const ws2 = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, ws1, "Tidsrapport");
+      XLSX.utils.book_append_sheet(wb, ws2, "Månadssammanställning");
+
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      await saveOrShareFile(excelBuffer, `tidsrapport_${activeProfileId}_${new Date().toISOString().slice(0,10)}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+
+    async function exportCSV() {
+      const filtered = getFilteredEntriesForExport();
+      const customers = getCustomers();
+      if (filtered.length === 0) { alert('Inga pass att exportera.'); return; }
+
+      let csv = "Datum;Kund;Starttid;Sluttid;Rasttider;Obetald rast (min);Betald tid (h);Timpris (kr);OB-typ;OB-tid (h);OB-tillägg (kr);Beskrivning;Totalt (kr)\n";
+      filtered.forEach(e => {
+        const cust = customers.find(c => c.id === e.customerId);
+        const calc = calculateEntryCost(e, cust);
+        const breaksStr = e.breaks && e.breaks.length > 0 ? e.breaks.map(b => `${b.start || '??'}–${b.end || '??'}`).join(', ') : '';
+        csv += `${e.date || ''};"${cust ? cust.name : 'Okänd'}";${e.startTime || ''};${e.endTime || ''};"${breaksStr}";${calc.breakMin};${calc.totalHours};${cust ? cust.hourly_rate : 0};"${calc.obTypeLabel || ''}";${calc.obHours};${calc.obCost};"${e.desc || ''}";${calc.cost}\n`;
+      });
+
+      csv += "\nMÅNADSSAMMANSTÄLLNING PER KUND\n";
+      csv += "Kund;Total tid (h);OB-tid (h);OB (kr);OB1 / Helg-OB (kr);Övertidstillägg (kr);Total summa (kr)\n";
+
+      const summaryMap = buildMonthlySummaryMap(filtered);
+
+      Object.keys(summaryMap).forEach(name => {
+        const s = summaryMap[name];
+        csv += `"${name}";${Number(s.totalHours.toFixed(2))};${Number(s.obHours.toFixed(2))};${Math.round(s.weekdayObCost)};${Math.round(s.weekendObCost)};${Math.round(s.otAddonCost)};${Math.round(s.finalTotalCost)}\n`;
+      });
+
+      await saveOrShareFile(csv, `tidsrapport_${activeProfileId}_${new Date().toISOString().slice(0,10)}.csv`, 'text/csv;charset=utf-8;');
+    }
+
+    async function exportData() {
+      const backupObj = { version: "5.12", profileId: activeProfileId, customers: getCustomers(), entries: getTimeEntries(), client: getClientInfo(), schedule: getScheduleInfo() };
+      await saveOrShareFile(JSON.stringify(backupObj, null, 2), `backup_${activeProfileId}.json`, 'application/json');
+    }
+
+    function importData(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const data = JSON.parse(e.target.result);
+        if (data.customers) saveCustomers(data.customers);
+        if (data.entries) {
+          saveTimeEntries(data.entries);
+          migrateOldEntries();
+        }
+        if (data.client) {
+          localStorage.setItem(getStorageKey('app_client_info_v5'), JSON.stringify(data.client));
+          loadClientInfoUI();
+        }
+        if (data.schedule) {
+          localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(data.schedule));
+          loadScheduleInfoUI();
+        }
+        checkUpcomingShiftNotifications();
+        alert('Återställningen lyckades!');
+      };
+      reader.readAsText(file);
+    }
+
+    function renderCustomerList() {
+      const customers = getCustomers();
+      const container = document.getElementById('customer-list');
+      container.innerHTML = '';
+      customers.forEach(c => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <strong>${c.name}</strong>
+              <div style="font-size:13px; color:var(--text-muted);">${c.hourly_rate} kr/h ${c.ob_enabled ? '• OB-aktiv' : ''} ${c.ot_enabled ? '• Månadsövertid (' + (c.ot_monthly_cap || 160) + 'h)' : ''}</div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="openCustomerModal('${c.id}')">Redigera</button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function openCustomerModal(customerId = null) {
+      const modal = document.getElementById('customer-modal');
+      const form = document.getElementById('customer-form');
+      form.reset();
+
+      if (customerId) {
+        const cust = getCustomers().find(c => c.id === customerId);
+        if (cust) {
+          document.getElementById('modal-title').innerText = 'Redigera kund';
+          document.getElementById('field-id').value = cust.id;
+          document.getElementById('field-name').value = cust.name;
+          document.getElementById('field-rate').value = cust.hourly_rate;
+          document.getElementById('field-night-exempt').checked = cust.night_work_exempt || false;
+          document.getElementById('field-ob').checked = cust.ob_enabled || false;
+          
+          document.getElementById('field-ob-start').value = cust.ob_start_time || '18:00';
+          document.getElementById('field-ob-end').value = cust.ob_end_time || '06:00';
+          document.getElementById('field-ob-type').value = cust.ob_rate_type || 'multiplier';
+          document.getElementById('field-ob-value').value = cust.ob_rate_value || 1.5;
+          
+          document.getElementById('field-ob-weekend-enable').checked = cust.ob_weekend_enabled || false;
+          document.getElementById('field-ob-weekend-allday').checked = cust.ob_weekend_allday !== false;
+          document.getElementById('field-ob-weekend-start').value = cust.ob_weekend_start_time || '00:00';
+          document.getElementById('field-ob-weekend-end').value = cust.ob_weekend_end_time || '23:59';
+          document.getElementById('field-ob-weekend-type').value = cust.ob_weekend_rate_type || 'multiplier';
+          document.getElementById('field-ob-weekend-value').value = cust.ob_weekend_rate_value || 2.0;
+
+          document.getElementById('field-ot-enabled').checked = cust.ot_enabled || false;
+          document.getElementById('field-ot-monthly-cap').value = cust.ot_monthly_cap || 160;
+          document.getElementById('field-ot-rate-type').value = cust.ot_rate_type || 'multiplier';
+          document.getElementById('field-ot-simple-val').value = cust.ot_simple_value || 1.5;
+          document.getElementById('field-ot-qual-val').value = cust.ot_qual_value || 2.0;
+
+          document.getElementById('field-notes').value = cust.notes || '';
+          document.getElementById('btn-delete-customer').style.display = 'inline-flex';
+        }
+      } else {
+        document.getElementById('modal-title').innerText = 'Ny kund';
+        document.getElementById('field-id').value = '';
+        document.getElementById('btn-delete-customer').style.display = 'none';
+      }
+
+      toggleOBFormFields();
+      toggleWeekendFields();
+      toggleOTFormFields();
+      updateCustomerOTLabels();
+      modal.showModal();
+    }
+
+    function closeCustomerModal() {
+      document.getElementById('customer-modal').close();
+    }
+
+    function toggleOBFormFields() {
+      const enabled = document.getElementById('field-ob').checked;
+      document.getElementById('ob-settings-container').style.display = enabled ? 'block' : 'none';
+    }
+
+    function toggleWeekendFields() {
+      const enabled = document.getElementById('field-ob-weekend-enable').checked;
+      document.getElementById('weekend-fields-container').style.display = enabled ? 'block' : 'none';
+    }
+
+    function toggleWeekendTimes() {
+      const allday = document.getElementById('field-ob-weekend-allday').checked;
+      document.getElementById('weekend-times-row').style.display = allday ? 'none' : 'flex';
+    }
+
+    function toggleOTFormFields() {
+      const enabled = document.getElementById('field-ot-enabled').checked;
+      document.getElementById('ot-settings-container').style.display = enabled ? 'block' : 'none';
+    }
+
+    function updateCustomerOTLabels() {
+      const type = document.getElementById('field-ot-rate-type').value;
+      const simpleLabel = document.getElementById('cust-ot-simple-label');
+      const qualLabel = document.getElementById('cust-ot-qual-label');
+
+      if (type === 'multiplier') {
+        simpleLabel.innerText = 'Övertidsfaktor (ex. 1.5)';
+        qualLabel.innerText = 'Kvalificerad Övertid (ex. 2.0)';
+      } else if (type === 'addon') {
+        simpleLabel.innerText = 'Övertidstillägg (kr/h)';
+        qualLabel.innerText = 'Kvalificerat tillägg (kr/h)';
+      } else if (type === 'fixed_rate') {
+        simpleLabel.innerText = 'Övertidstaxa (kr/h)';
+        qualLabel.innerText = 'Kvalificerad taxa (kr/h)';
+      }
+    }
+
+    document.getElementById('customer-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const id = document.getElementById('field-id').value || 'k_' + Date.now();
+      const name = document.getElementById('field-name').value.trim();
+      const rate = parseFloat(document.getElementById('field-rate').value) || 0;
+      
+      const updatedCustomer = {
+        id, name,
+        hourly_rate: rate,
+        night_work_exempt: document.getElementById('field-night-exempt').checked,
+        ob_enabled: document.getElementById('field-ob').checked,
+        ob_start_time: document.getElementById('field-ob-start').value,
+        ob_end_time: document.getElementById('field-ob-end').value,
+        ob_rate_type: document.getElementById('field-ob-type').value,
+        ob_rate_value: parseFloat(document.getElementById('field-ob-value').value) || 1.0,
+        ob_weekend_enabled: document.getElementById('field-ob-weekend-enable').checked,
+        ob_weekend_allday: document.getElementById('field-ob-weekend-allday').checked,
+        ob_weekend_start_time: document.getElementById('field-ob-weekend-start').value,
+        ob_weekend_end_time: document.getElementById('field-ob-weekend-end').value,
+        ob_weekend_rate_type: document.getElementById('field-ob-weekend-type').value,
+        ob_weekend_rate_value: parseFloat(document.getElementById('field-ob-weekend-value').value) === 0 ? 0 : (parseFloat(document.getElementById('field-ob-weekend-value').value) || 1.0),
+        
+        ot_enabled: document.getElementById('field-ot-enabled').checked,
+        ot_monthly_cap: parseFloat(document.getElementById('field-ot-monthly-cap').value) || 160,
+        ot_rate_type: document.getElementById('field-ot-rate-type').value,
+        ot_simple_value: parseFloat(document.getElementById('field-ot-simple-val').value) || 1.5,
+        ot_qual_value: parseFloat(document.getElementById('field-ot-qual-val').value) || 2.0,
+
+        notes: document.getElementById('field-notes').value.trim()
+      };
+
+      let customers = getCustomers();
+      const index = customers.findIndex(c => c.id === id);
+      if (index >= 0) customers[index] = updatedCustomer;
+      else customers.push(updatedCustomer);
+
+      saveCustomers(customers);
+      closeCustomerModal();
+    });
+
+    function deleteCurrentCustomer() {
+      const id = document.getElementById('field-id').value;
+      if (!id) return;
+      if (confirm('Är du säker på att du vill ta bort denna kund?')) {
+        let customers = getCustomers().filter(c => c.id !== id);
+        saveCustomers(customers);
+        closeCustomerModal();
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      renderProfileDropdown();
+      migrateOldEntries();
+      document.getElementById('time-date').valueAsDate = new Date();
+      populateCustomerDropdowns();
+      renderCustomerList();
+      renderTimeEntries();
+      loadClientInfoUI();
+      loadScheduleInfoUI();
+      calculateRequiredRest();
+      
+      updateTimerUI();
+      loadSyncSettingsUI();
+      checkUpcomingShiftNotifications();
+    });
+  </script>
+</body>
+</html>
