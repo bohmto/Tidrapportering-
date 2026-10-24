@@ -372,7 +372,6 @@
       margin-top: 1px;
       text-align: center;
     }
-    /* EGEN STIL FÖR PLANERADE PASS I FÖRVÄG (LILA/INDIGO) */
     .calendar-cell .shift-tag.planned-shift {
       background: #e0e7ff;
       color: #3730a3;
@@ -580,8 +579,8 @@
       </div>
 
       <div style="margin-bottom: 12px;">
-        <button class="btn btn-primary btn-sm" style="width: 100%; margin-bottom: 8px;" onclick="selectAndroidBackupFolder()">📁 Välj automatisk backup-mapp (Android)</button>
-        <div id="backup-folder-status" style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">Ingen mapp vald ännu.</div>
+        <button class="btn btn-primary btn-sm" style="width: 100%; margin-bottom: 8px;" onclick="selectAndroidBackupFolder()">💾 Exportera / Dela säkerhetskopia</button>
+        <div id="backup-folder-status" style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">Sparar via Androids delningsmeny (Drive, OneDrive, e-post m.m.).</div>
       </div>
 
       <div style="display: flex; gap: 8px; margin-bottom: 16px;">
@@ -1018,7 +1017,6 @@
 
     let timerInterval = null;
     let alarmStateMap = {};
-    let androidFolderHandle = null;
     let currentCalDate = new Date();
 
     // --- FLIK-SVEPNING (SWIPE) ---
@@ -1102,13 +1100,13 @@
 
         if (!notifiedShifts[dateStr]) notifiedShifts[dateStr] = {};
 
-        // Påminnelse 24 timmar innan (mellan 23.5h och 24.5h)
+        // Påminnelse 24 timmar innan
         if (hoursLeft > 23.5 && hoursLeft <= 24.5 && !notifiedShifts[dateStr]['24h']) {
           showNotification(`📅 Påminnelse: Pass imorgon!`, `Du har ett planerat pass (${dateStr} kl. ${startTime}) om 24 timmar.`);
           notifiedShifts[dateStr]['24h'] = true;
         }
 
-        // Påminnelse 12 timmar innan (mellan 11.5h och 12.5h)
+        // Påminnelse 12 timmar innan
         if (hoursLeft > 11.5 && hoursLeft <= 12.5 && !notifiedShifts[dateStr]['12h']) {
           showNotification(`⏳ Påminnelse: Pass om 12 timmar!`, `Ditt pass (${dateStr} kl. ${startTime}) startar om 12 timmar.`);
           notifiedShifts[dateStr]['12h'] = true;
@@ -1132,7 +1130,6 @@
       }
     }
 
-    // Interval för att kontinuerligt kontrollera kommande pass
     setInterval(checkUpcomingShiftNotifications, 60000);
 
     // --- FLERA ANVÄNDARE / PROFILER ---
@@ -1370,23 +1367,6 @@
       let errors = [];
       let successMsgs = [];
 
-      if (method === 'cloud' || method === 'both') {
-        if (androidFolderHandle) {
-          try {
-            const dateStr = new Date().toISOString().slice(0, 10);
-            const filename = `autobackup_${activeProfileId}_${dateStr}.json`;
-            const fileHandle = await androidFolderHandle.getFileHandle(filename, { create: true });
-            const writable = await fileHandle.createWritable();
-            await writable.write(JSON.stringify(data, null, 2));
-            await writable.close();
-            successMsgs.push('Android-mapp');
-          } catch (err) {
-            console.error('Fel vid skrivning till lokal mapp:', err);
-            errors.push('Lokal mapp: ' + err.message);
-          }
-        }
-      }
-
       if (method === 'server' || method === 'both') {
         try {
           const url = localStorage.getItem('serverUrl');
@@ -1405,22 +1385,9 @@
         } else if (successMsgs.length > 0) {
           alert('Synkronisering lyckades till: ' + successMsgs.join(', '));
         } else {
-          alert('Ingen aktiv synkdestination utfördes (välj mapp eller server).');
+          alert('Ingen aktiv synkdestination utfördes.');
         }
       }
-    }
-
-    async function runAutoBackup() {
-      const backupObj = {
-        version: "5.12",
-        profileId: activeProfileId,
-        exportDate: new Date().toISOString(),
-        customers: getCustomers(),
-        entries: getTimeEntries(),
-        client: getClientInfo(),
-        schedule: getScheduleInfo()
-      };
-      await performSync(backupObj, true);
     }
 
     async function triggerManualSync() {
@@ -1436,87 +1403,22 @@
       await performSync(backupObj, false);
     }
 
+    // Android-backup/export som använder Androids delningsmeny
     async function selectAndroidBackupFolder() {
-      if (!('showDirectoryPicker' in window)) {
-        alert("Din webbläsare stöder inte direkt mappanvändning. Använd 'Spara backup' i stället.");
-        return;
-      }
-      try {
-        androidFolderHandle = await window.showDirectoryPicker();
-        await verifyFolderPermission(androidFolderHandle, true);
-        
-        await saveFolderHandleToIDB(androidFolderHandle);
-        updateFolderStatusText(androidFolderHandle.name);
-        
-        runAutoBackup();
-        alert("Mapp för automatisk säkerhetskopiering har valts!");
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          console.error("Fel vid val av mapp:", err);
-        }
-      }
-    }
+      const backupObj = {
+        version: "5.12",
+        profileId: activeProfileId,
+        exportDate: new Date().toISOString(),
+        customers: getCustomers(),
+        entries: getTimeEntries(),
+        client: getClientInfo(),
+        schedule: getScheduleInfo()
+      };
 
-    async function verifyFolderPermission(handle, readWrite) {
-      const options = { mode: readWrite ? 'readwrite' : 'read' };
-      if ((await handle.queryPermission(options)) === 'granted') {
-        return true;
-      }
-      if ((await handle.requestPermission(options)) === 'granted') {
-        return true;
-      }
-      return false;
-    }
-
-    function saveFolderHandleToIDB(handle) {
-      return new Promise((resolve, reject) => {
-        const request = indexedDB.open('PWA_Backup_DB', 1);
-        request.onupgradeneeded = e => {
-          e.target.result.createObjectStore('handles');
-        };
-        request.onsuccess = e => {
-          const db = e.target.result;
-          const tx = db.transaction('handles', 'readwrite');
-          tx.objectStore('handles').put(handle, 'backupFolder');
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-        };
-        request.onerror = () => reject(request.error);
-      });
-    }
-
-    function loadFolderHandleFromIDB() {
-      return new Promise((resolve) => {
-        const request = indexedDB.open('PWA_Backup_DB', 1);
-        request.onupgradeneeded = e => {
-          e.target.result.createObjectStore('handles');
-        };
-        request.onsuccess = e => {
-          const db = e.target.result;
-          const tx = db.transaction('handles', 'readonly');
-          const req = tx.objectStore('handles').get('backupFolder');
-          req.onsuccess = async () => {
-            if (req.result) {
-              const handle = req.result;
-              if (await verifyFolderPermission(handle, true)) {
-                androidFolderHandle = handle;
-                updateFolderStatusText(handle.name);
-                runAutoBackup();
-              }
-            }
-            resolve();
-          };
-          req.onerror = () => resolve();
-        };
-        request.onerror = () => resolve();
-      });
-    }
-
-    function updateFolderStatusText(name) {
-      const el = document.getElementById('backup-folder-status');
-      if (el) {
-        el.innerHTML = `✅ Automatisk sparad mapp: <strong>${name}</strong>`;
-      }
+      const jsonString = JSON.stringify(backupObj, null, 2);
+      const filename = `tidsrapport_backup_${activeProfileId}_${new Date().toISOString().slice(0,10)}.json`;
+      
+      await saveOrShareFile(jsonString, filename, 'application/json');
     }
 
     function updateAppStatusIndicators(shift, clockText) {
@@ -1565,7 +1467,6 @@
       };
       localStorage.setItem(getStorageKey('app_client_info_v5'), JSON.stringify(client));
       alert("Användarens uppgifter har sparats!");
-      runAutoBackup();
     }
 
     function loadClientInfoUI() {
@@ -1830,14 +1731,12 @@
       if (!dateStr) return;
 
       if (confirm(`Vill du ta bort passet för ${dateStr}?`)) {
-        // Ta bort från kalender
         const sched = getScheduleInfo();
         if (sched.calendarShifts && sched.calendarShifts[dateStr]) {
           delete sched.calendarShifts[dateStr];
           localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
         }
 
-        // Ta bort från rapporterade tidssegment om det finns
         let entries = getTimeEntries();
         const newEntries = entries.filter(e => e.date !== dateStr);
         if (newEntries.length !== entries.length) {
@@ -1846,7 +1745,6 @@
 
         closeScheduleDayModal();
         renderScheduleCalendar();
-        runAutoBackup();
       }
     }
 
@@ -1888,7 +1786,6 @@
       closeScheduleDayModal();
       renderScheduleCalendar();
       checkUpcomingShiftNotifications();
-      runAutoBackup();
     }
 
     function loadScheduleInfoUI() {
@@ -1942,7 +1839,6 @@
         localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
         renderScheduleCalendar();
         checkUpcomingShiftNotifications();
-        runAutoBackup();
         alert(`Lyckades importera ${importedCount} skift till kalendern!`);
       };
       reader.readAsText(file);
@@ -2086,7 +1982,6 @@
       populateCustomerDropdowns();
       renderCustomerList();
       renderTimeEntries();
-      runAutoBackup();
     }
 
     function getTimeEntries() {
@@ -2099,7 +1994,6 @@
       renderTimeEntries();
       calculateRequiredRest();
       renderScheduleCalendar();
-      runAutoBackup();
     }
 
     function safeNum(val, defaultVal = 0) {
@@ -2113,7 +2007,6 @@
         renderTimeEntries();
         calculateRequiredRest();
         renderScheduleCalendar();
-        runAutoBackup();
         alert("Alla pass har rensats.");
       }
     }
@@ -2345,7 +2238,6 @@
       }
 
       function tick() {
-        // Hämta det absolut senaste tillståndet från localStorage om det sparats om i bakgrunden
         const currentShift = getActiveShift() || shift;
 
         let currentWorkedMs = Date.now() - currentShift.startTime - currentShift.breakTimeMs;
@@ -2999,10 +2891,7 @@
       loadScheduleInfoUI();
       calculateRequiredRest();
       
-      // Starta om timern automatiskt om ett pass är igång när appen öppnas
       updateTimerUI();
-      
-      loadFolderHandleFromIDB();
       loadSyncSettingsUI();
       checkUpcomingShiftNotifications();
     });
