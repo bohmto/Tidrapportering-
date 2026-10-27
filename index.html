@@ -318,7 +318,7 @@
     }
     .calendar-grid {
       display: grid;
-      grid-template-columns: repeat(7, 1fr);
+      grid-template-columns: 28px repeat(7, 1fr);
       gap: 3px;
       text-align: center;
     }
@@ -327,6 +327,19 @@
       font-weight: 700;
       color: var(--text-muted);
       padding: 4px 0;
+    }
+    .calendar-week-num {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-muted);
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      min-height: 56px;
+      max-height: 56px;
     }
     .calendar-cell {
       min-height: 56px;
@@ -376,6 +389,12 @@
       background: #e0e7ff;
       color: #3730a3;
       border: 1px dashed #6366f1;
+      font-weight: 600;
+    }
+    .calendar-cell .shift-tag.busy-tag {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
       font-weight: 600;
     }
     .calendar-cell .break-tag {
@@ -750,6 +769,14 @@
         <label for="modal-sched-off" style="margin: 0;">Ledig / Skiftfri</label>
         <label class="switch">
           <input type="checkbox" id="modal-sched-off" onchange="toggleModalDayInputs()">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="form-group" style="display: flex; justify-content: space-between; align-items: center; background: #f1f5f9; padding: 12px; border-radius: 8px; margin-top: 8px;">
+        <label for="modal-sched-busy" style="margin: 0;">Hel dag upptagen</label>
+        <label class="switch">
+          <input type="checkbox" id="modal-sched-busy" onchange="toggleModalDayInputs()">
           <span class="slider"></span>
         </label>
       </div>
@@ -1536,12 +1563,21 @@
         breakMin: entry.breakMin || 0,
         note: `${custName}${entry.desc ? ' - ' + entry.desc : ''}`,
         off: false,
+        busy: false,
         isCompleted: true
       };
 
       localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
       renderScheduleCalendar();
       checkUpcomingShiftNotifications();
+    }
+
+    function getWeekNumber(date) {
+      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
     }
 
     function renderScheduleCalendar() {
@@ -1567,7 +1603,7 @@
 
       grid.innerHTML = '';
 
-      const dayHeads = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"];
+      const dayHeads = ["V.", "Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"];
       dayHeads.forEach(h => {
         grid.innerHTML += `<div class="calendar-day-head">${h}</div>`;
       });
@@ -1580,82 +1616,107 @@
 
       const prevMonthLastDay = new Date(year, month, 0).getDate();
 
+      let cells = [];
       for (let i = startDayOfWeek - 1; i >= 0; i--) {
         const d = prevMonthLastDay - i;
-        grid.innerHTML += `<div class="calendar-cell other-month"><span class="day-num">${d}</span></div>`;
+        const prevMonth = month === 0 ? 11 : month - 1;
+        const prevYear = month === 0 ? year - 1 : year;
+        const dateStr = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        cells.push({ dayNum: d, dateStr, otherMonth: true });
       }
 
       const todayStr = new Date().toISOString().slice(0, 10);
       for (let d = 1; d <= lastDay.getDate(); d++) {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-        const isToday = dateStr === todayStr;
-
-        let shift = shifts[dateStr];
-        let isCompletedWorked = false;
-
-        if (showWorked) {
-          const entryForDay = entries.find(e => e.date === dateStr);
-          if (entryForDay) {
-            const customers = getCustomers();
-            const cust = customers.find(c => c.id === entryForDay.customerId);
-            const custName = cust ? cust.name : 'Pass';
-            shift = {
-              start: entryForDay.startTime || '',
-              end: entryForDay.endTime || '',
-              breaks: entryForDay.breaks || [],
-              breakMin: entryForDay.breakMin || 0,
-              note: `${custName}${entryForDay.desc ? ' - ' + entryForDay.desc : ''}`,
-              off: false,
-              displayLabel: custName,
-              isCompleted: true
-            };
-            isCompletedWorked = true;
-          }
-        }
-
-        let shiftContent = '';
-        let offClass = '';
-
-        if (shift) {
-          if (shift.off) {
-            shiftContent = `<div class="shift-tag">Ledig</div>`;
-            offClass = ' off-day';
-          } else {
-            const label = shift.displayLabel || (shift.note ? shift.note.split(' - ')[0] : 'Pass');
-            
-            let breakText = '';
-            if (shift.breaks && shift.breaks.length > 0) {
-              const b = shift.breaks[0];
-              if (b.start && b.end) {
-                breakText = `☕ ${b.start}`;
-              } else if (shift.breakMin) {
-                breakText = `☕ ${shift.breakMin}m`;
-              }
-            } else if (shift.breakMin > 0) {
-              breakText = `☕ ${shift.breakMin}m`;
-            }
-
-            const plannedClass = (dateStr > todayStr && !isCompletedWorked) ? ' planned-shift' : '';
-
-            shiftContent = `
-              <div class="shift-tag${plannedClass}" title="${label}">${label}</div>
-              ${breakText ? `<div class="break-tag" title="Rast">${breakText}</div>` : ''}
-            `;
-          }
-        }
-
-        grid.innerHTML += `
-          <div class="calendar-cell ${isToday ? 'today' : ''}${offClass}" onclick="openScheduleDayModal('${dateStr}')">
-            <span class="day-num">${d}</span>
-            ${shiftContent}
-          </div>
-        `;
+        cells.push({ dayNum: d, dateStr, otherMonth: false });
       }
 
-      const totalCells = startDayOfWeek + lastDay.getDate();
-      const nextMonthDays = (7 - (totalCells % 7)) % 7;
-      for (let d = 1; d <= nextMonthDays; d++) {
-        grid.innerHTML += `<div class="calendar-cell other-month"><span class="day-num">${d}</span></div>`;
+      let remainder = cells.length % 7;
+      if (remainder > 0) {
+        let nextMonthDaysToAdd = 7 - remainder;
+        for (let d = 1; d <= nextMonthDaysToAdd; d++) {
+          const nextMonth = month === 11 ? 0 : month + 1;
+          const nextYear = month === 11 ? year + 1 : year;
+          const dateStr = `${nextYear}-${String(nextMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+          cells.push({ dayNum: d, dateStr, otherMonth: true });
+        }
+      }
+
+      for (let i = 0; i < cells.length; i += 7) {
+        const weekCells = cells.slice(i, i + 7);
+        const weekNumDate = new Date(weekCells[3].dateStr);
+        const weekNum = getWeekNumber(weekNumDate);
+
+        grid.innerHTML += `<div class="calendar-week-num">${weekNum}</div>`;
+
+        weekCells.forEach(cell => {
+          const isToday = cell.dateStr === todayStr;
+
+          let shift = shifts[cell.dateStr];
+          let isCompletedWorked = false;
+
+          if (showWorked && !cell.otherMonth) {
+            const entryForDay = entries.find(e => e.date === cell.dateStr);
+            if (entryForDay) {
+              const customers = getCustomers();
+              const cust = customers.find(c => c.id === entryForDay.customerId);
+              const custName = cust ? cust.name : 'Pass';
+              shift = {
+                start: entryForDay.startTime || '',
+                end: entryForDay.endTime || '',
+                breaks: entryForDay.breaks || [],
+                breakMin: entryForDay.breakMin || 0,
+                note: `${custName}${entryForDay.desc ? ' - ' + entryForDay.desc : ''}`,
+                off: false,
+                busy: false,
+                displayLabel: custName,
+                isCompleted: true
+              };
+              isCompletedWorked = true;
+            }
+          }
+
+          let shiftContent = '';
+          let offClass = '';
+
+          if (shift) {
+            if (shift.off) {
+              shiftContent = `<div class="shift-tag">Ledig</div>`;
+              offClass = ' off-day';
+            } else if (shift.busy) {
+              shiftContent = `<div class="shift-tag busy-tag">Upptagen</div>`;
+            } else {
+              const label = shift.displayLabel || (shift.note ? shift.note.split(' - ')[0] : 'Pass');
+              
+              let breakText = '';
+              if (shift.breaks && shift.breaks.length > 0) {
+                const b = shift.breaks[0];
+                if (b.start && b.end) {
+                  breakText = `☕ ${b.start}`;
+                } else if (shift.breakMin) {
+                  breakText = `☕ ${shift.breakMin}m`;
+                }
+              } else if (shift.breakMin > 0) {
+                breakText = `☕ ${shift.breakMin}m`;
+              }
+
+              const plannedClass = (cell.dateStr > todayStr && !isCompletedWorked) ? ' planned-shift' : '';
+
+              shiftContent = `
+                <div class="shift-tag${plannedClass}" title="${label}">${label}</div>
+                ${breakText ? `<div class="break-tag" title="Rast">${breakText}</div>` : ''}
+              `;
+            }
+          }
+
+          const otherMonthClass = cell.otherMonth ? ' other-month' : '';
+          grid.innerHTML += `
+            <div class="calendar-cell ${isToday ? 'today' : ''}${otherMonthClass}${offClass}" onclick="openScheduleDayModal('${cell.dateStr}')">
+              <span class="day-num">${cell.dayNum}</span>
+              ${shiftContent}
+            </div>
+          `;
+        });
       }
     }
 
@@ -1705,16 +1766,18 @@
           end: entryForDay.endTime || '16:00',
           breaks: entryForDay.breaks || [],
           note: `${custName}${entryForDay.desc ? ' - ' + entryForDay.desc : ''}`,
-          off: false
+          off: false,
+          busy: false
         };
       } else if (!currentShift) {
-        currentShift = { start: '07:00', end: '16:00', breaks: [], note: '', off: false };
+        currentShift = { start: '07:00', end: '16:00', breaks: [], note: '', off: false, busy: false };
       }
 
       document.getElementById('modal-sched-date').value = dateStr;
       title.innerText = `Skift ${dateStr}`;
 
       document.getElementById('modal-sched-off').checked = !!currentShift.off;
+      document.getElementById('modal-sched-busy').checked = !!currentShift.busy;
       document.getElementById('modal-sched-start').value = currentShift.start || '07:00';
       document.getElementById('modal-sched-end').value = currentShift.end || '16:00';
       document.getElementById('modal-sched-note').value = currentShift.note || '';
@@ -1759,13 +1822,15 @@
 
     function toggleModalDayInputs() {
       const isOff = document.getElementById('modal-sched-off').checked;
-      document.getElementById('modal-sched-times-group').style.display = isOff ? 'none' : 'block';
+      const isBusy = document.getElementById('modal-sched-busy').checked;
+      document.getElementById('modal-sched-times-group').style.display = (isOff || isBusy) ? 'none' : 'block';
     }
 
     function saveScheduleDayModal(e) {
       if (e) e.preventDefault();
       const dateStr = document.getElementById('modal-sched-date').value;
       const isOff = document.getElementById('modal-sched-off').checked;
+      const isBusy = document.getElementById('modal-sched-busy').checked;
       const start = document.getElementById('modal-sched-start').value;
       const end = document.getElementById('modal-sched-end').value;
       const note = document.getElementById('modal-sched-note').value.trim();
@@ -1789,7 +1854,7 @@
       const sched = getScheduleInfo();
       if (!sched.calendarShifts) sched.calendarShifts = {};
 
-      sched.calendarShifts[dateStr] = { start, end, breaks: breakRows, breakMin: totalBreakMins, note, off: isOff };
+      sched.calendarShifts[dateStr] = { start, end, breaks: breakRows, breakMin: totalBreakMins, note, off: isOff, busy: isBusy };
 
       localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
       closeScheduleDayModal();
@@ -1839,7 +1904,8 @@
               breaks: [{ start: '12:00', end: '12:30' }],
               breakMin: 30,
               note: '',
-              off: false
+              off: false,
+              busy: false
             };
             importedCount++;
           }
@@ -2053,14 +2119,13 @@
       return IDBKeyRange.bound(profileId + ':', profileId + ':\uffff');
     }
 
-    // Debounce: flera sparningar i rad ger en kopia, och kalenderuppdateringen hinner med
     function scheduleAutoBackup(reason) {
       clearTimeout(autoBackupTimer);
       autoBackupTimer = setTimeout(() => createAutoBackup(reason), 400);
     }
 
     async function createAutoBackup(reason) {
-      const data = buildBackupObject(); // läs state direkt, innan något await
+      const data = buildBackupObject();
       const profileId = activeProfileId;
       try {
         const db = await openBackupDB();
