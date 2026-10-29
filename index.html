@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="sv">
 <head>
@@ -1982,19 +1983,85 @@
       if (!output) return;
 
       if (entries.length === 0) {
-        output.innerHTML = '<p style="margin:0; color:var(--text-muted);">Inga registrerade pass ännu. Stämpla eller lägg till pass för att se beräknat vilobehov.</p>';
+        output.innerHTML = '<p style="margin:0; color:var(--text-muted);">Inga registrerade pass ännu. Stämpla eller lägg till pass för att se beräknat vilobehov och regelsökning.</p>';
         return;
       }
 
+      // Sortera pass kronologiskt efter datum och starttid
       const sorted = [...entries].sort((a, b) => {
         const dateA = new Date(`${a.date}T${a.startTime || '00:00'}`);
         const dateB = new Date(`${b.date}T${b.startTime || '00:00'}`);
         return dateA - dateB;
       });
-      const lastEntry = sorted[sorted.length - 1];
 
+      let reducedDailyCount = 0;
+      let lastReducedWeekly = null;
+
+      // Gå igenom pass och analysera vilotider (glapp) mellan påföljande pass
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const current = sorted[i];
+        const next = sorted[i + 1];
+
+        if (!current.date || !current.endTime || !next.date || !next.startTime) continue;
+
+        let currentEnd = new Date(`${current.date}T${current.endTime}`);
+        let nextStart = new Date(`${next.date}T${next.startTime}`);
+        if (nextStart < currentEnd) nextStart.setDate(nextStart.getDate() + 1);
+
+        const restHours = (nextStart - currentEnd) / (1000 * 60 * 60);
+
+        // Klassificera vilan enligt kör- och vilotidslagen
+        if (restHours >= 45) {
+          // Ordinarie veckovila (nollställer räknaren för reducerade dygnsvilor)
+          reducedDailyCount = 0;
+        } else if (restHours >= 24 && restHours < 45) {
+          // Förkortad veckovila (24-45h)
+          reducedDailyCount = 0;
+          const compDeadline = new Date(nextStart.getTime() + 21 * 24 * 60 * 60 * 1000);
+          lastReducedWeekly = {
+            date: current.date,
+            restHours: Math.round(restHours),
+            shortage: 45 - Math.round(restHours),
+            deadline: compDeadline
+          };
+        } else if (restHours >= 9 && restHours < 11) {
+          // Reducerad dygnsvila (9-11h)
+          reducedDailyCount++;
+        }
+      }
+
+      const lastEntry = sorted[sorted.length - 1];
       let nextAllowedStartText = '';
-      let nextAllowedWeekendStartText = '';
+      let warningsHtml = '';
+
+      // Kontrollera om max antal reducerade dygnsvilor (3 st) har förbrukats
+      if (reducedDailyCount >= 3) {
+        warningsHtml += `
+          <div style="background:#fee2e2; color:#991b1b; padding:10px 12px; border-radius:8px; margin-bottom:10px; border:1px solid #fca5a5; font-size:13px; line-height:1.4;">
+            <strong>⚠️ VIKTIGT (Kör- och vilotidslagen):</strong> Du har förbrukat <strong>3 reducerade dygnsvilor</strong> (9-11h) sedan sista veckovilan. 
+            Nästa dygnsvila <strong>MÅSTE vara en ordinarie dygnsvila på minst 11 timmar</strong>.
+          </div>
+        `;
+      } else {
+        warningsHtml += `
+          <div style="background:#f0fdf4; color:#166534; padding:8px 12px; border-radius:8px; margin-bottom:10px; border:1px solid #bbf7d0; font-size:13px;">
+            ✅ Reducerade dygnsvilor förbrukade: <strong>${reducedDailyCount} av 3</strong> tillåtna. 
+            (${3 - reducedDailyCount} st kvar innan krav på ordinarie 11h vila).
+          </div>
+        `;
+      }
+
+      // Kontrollera om det finns en förkortad helgvila som behöver kompenseras
+      if (lastReducedWeekly) {
+        const deadStr = lastReducedWeekly.deadline.toLocaleDateString('sv-SE', { weekday: 'short', month: 'numeric', day: 'numeric' });
+        warningsHtml += `
+          <div style="background:#fef3c7; color:#92400e; padding:10px 12px; border-radius:8px; margin-bottom:10px; border:1px solid #fcd34d; font-size:13px; line-height:1.4;">
+            <strong>🎈 Förkortad helgvila registrerad (${lastReducedWeekly.date}):</strong> Tog ${lastReducedWeekly.restHours}h vila.<br>
+            ⚠️ Du måste kompensera med sammanhängande <strong>${lastReducedWeekly.shortage} timmar</strong> vila senast <strong>${deadStr}</strong> (före slutet av 3:e veckan).
+          </div>
+        `;
+      }
+
       if (lastEntry.date && lastEntry.endTime && lastEntry.startTime) {
         const start = new Date(`${lastEntry.date}T${lastEntry.startTime}`);
         let lastEnd = new Date(`${lastEntry.date}T${lastEntry.endTime}`);
@@ -2010,22 +2077,20 @@
         const formatTime = (d) => d.toLocaleDateString('sv-SE', { weekday: 'short', month: 'numeric', day: 'numeric' }) + ' kl ' + d.toTimeString().slice(0, 5);
 
         nextAllowedStartText = `
-          <p style="margin-top:0; margin-bottom:8px;"><strong>🌙 Dygnsvila efter senaste passet (${lastEntry.date}):</strong></p>
+          <p style="margin-top:0; margin-bottom:6px;"><strong>🌙 Tidigaste start efter senaste passet (${lastEntry.date}):</strong></p>
           <ul style="padding-left: 20px; margin-bottom: 12px;">
-            <li><strong>Ordinarie Dygnsvila (11h):</strong> Nästa pass får starta tidigast <strong>${formatTime(earl11)}</strong>.</li>
-            <li><strong>Reducerad Dygnsvila (9h):</strong> Får starta tidigast <strong>${formatTime(earl9)}</strong> (max 3 reducerade vilor mellan två veckovilor).</li>
+            <li><strong>Ordinarie Dygnsvila (11h):</strong> Tidigast <strong>${formatTime(earl11)}</strong>.</li>
+            <li><strong>Reducerad Dygnsvila (9h):</strong> Tidigast <strong>${formatTime(earl9)}</strong> ${reducedDailyCount >= 3 ? '<span style="color:#dc2626; font-weight:bold;">(Ej tillåtet - kvoten 3/3 förbrukad!)</span>' : ''}</li>
           </ul>
-        `;
-
-        nextAllowedWeekendStartText = `
-          <p style="margin-top:0; margin-bottom:8px;"><strong>🎈 Helgvila / Veckovila efter senaste passet (${lastEntry.date}):</strong></p>
+          <p style="margin-top:0; margin-bottom:6px;"><strong>🎈 Veckovila / Helgvila:</strong></p>
           <ul style="padding-left: 20px; margin-bottom: 12px;">
-            <li><strong>Ordinarie Helgvila (45h):</strong> Nästa pass får starta tidigast <strong>${formatTime(earl45)}</strong>.</li>
-            <li><strong>Reducerad Helgvila (24h):</strong> Får starta tidigast <strong>${formatTime(earl24)}</strong> (kräver kompensation med 21h).</li>
+            <li><strong>Ordinarie Helgvila (45h):</strong> Tidigast <strong>${formatTime(earl45)}</strong>.</li>
+            <li><strong>Reducerad Helgvila (24h):</strong> Tidigast <strong>${formatTime(earl24)}</strong> (kräver kompensationsvila).</li>
           </ul>
         `;
       }
 
+      // Beräkna arbetad tid denna vecko-period (Vägarbetstidslagen)
       const now = new Date();
       const startOfWeek = new Date(now);
       const day = startOfWeek.getDay() || 7;
@@ -2040,15 +2105,14 @@
           weeklyWorkedMins += ((parseFloat(e.hours) || 0) * 60);
         }
       });
-
       const weeklyHours = (weeklyWorkedMins / 60).toFixed(2);
 
       output.innerHTML = `
+        ${warningsHtml}
         ${nextAllowedStartText}
-        ${nextAllowedWeekendStartText}
-        <p style="margin-top:0; margin-bottom:8px;"><strong>📅 Veckostatus & Vägarbetstid:</strong></p>
+        <p style="margin-top:0; margin-bottom:6px;"><strong>📊 Vägarbetstid denna vecka:</strong></p>
         <ul style="padding-left: 20px; margin: 0;">
-          <li><strong>Arbetad tid denna vecko-period:</strong> <strong>${weeklyHours} h</strong> (Absolut max 60h/vecko-tak enligt Vägarbetstidslagen).</li>
+          <li><strong>Arbetad tid:</strong> <strong>${weeklyHours} h</strong> (Absolut max 60h/vecko-tak).</li>
         </ul>
       `;
     }
@@ -3127,3 +3191,4 @@
   </script>
 </body>
 </html>
+```
