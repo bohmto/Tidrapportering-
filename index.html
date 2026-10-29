@@ -1051,7 +1051,26 @@
       }
     ];
 
-    let timerInterval = null;
+    let timerWorker = null;
+
+    // Inline Web Worker för att driva timern i bakgrunden utan att bli strypt av webbläsaren
+    const workerCode = `
+      let interval = null;
+      self.onmessage = function(e) {
+        if (e.data === 'start') {
+          if (interval) clearInterval(interval);
+          interval = setInterval(() => {
+            self.postMessage('tick');
+          }, 1000);
+        } else if (e.data === 'stop') {
+          if (interval) clearInterval(interval);
+          interval = null;
+        }
+      };
+    `;
+    const blob = new Blob([workerCode], { type: 'application/javascript' });
+    const workerUrl = URL.createObjectURL(blob);
+
     let alarmStateMap = {};
     let currentCalDate = new Date();
 
@@ -2496,6 +2515,43 @@
       const topStatusText = document.getElementById('top-status-text');
       const topStatusBar = document.getElementById('top-status-bar');
 
+      function tick() {
+        const currentShift = getActiveShift();
+        if (!currentShift) return;
+
+        let currentWorkedMs = Date.now() - currentShift.startTime - currentShift.breakTimeMs;
+        if (currentShift.status === 'break' && currentShift.breakStart) {
+          currentWorkedMs = currentShift.breakStart - currentShift.startTime - currentShift.breakTimeMs;
+        }
+
+        const sec = Math.floor((Math.max(0, currentWorkedMs) / 1000) % 60);
+        const min = Math.floor((Math.max(0, currentWorkedMs) / (1000 * 60)) % 60);
+        const hrs = Math.floor(Math.max(0, currentWorkedMs) / (1000 * 60 * 60));
+        const clockText = String(hrs).padStart(2, '0') + ':' + String(min).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+
+        clock.innerText = clockText;
+
+        const cust = getCustomers().find(c => c.id === currentShift.customerId);
+        const custName = cust ? cust.name : 'Okänd kund';
+
+        if (currentShift.status === 'working') {
+          subtext.innerText = `Startat kl ${new Date(currentShift.startTime).toTimeString().slice(0,5)}`;
+          topStatusText.innerText = `⏱️ ARBETAR: ${custName} (${clockText})`;
+          updateAppStatusIndicators(currentShift, clockText);
+          updateBackgroundNotification(`⏱️ Arbetar på ${custName}`, `Arbetad tid: ${clockText}`, true, false);
+        } else if (currentShift.status === 'break') {
+          const elapsedBreakMs = Date.now() - currentShift.breakStart;
+          const bSec = Math.floor((elapsedBreakMs / 1000) % 60);
+          const bMin = Math.floor((elapsedBreakMs / (1000 * 60)) % 60);
+          const breakClockText = String(bMin).padStart(2, '0') + ':' + String(bSec).padStart(2, '0');
+          
+          subtext.innerText = `På rast sedan ${new Date(currentShift.breakStart).toTimeString().slice(0,5)} (${breakClockText})`;
+          topStatusText.innerText = `☕ RAST: ${custName} (Rast: ${breakClockText})`;
+          updateAppStatusIndicators(currentShift, clockText);
+          updateBackgroundNotification(`☕ Rast på ${custName}`, `Rasttid: ${breakClockText}`, true, true);
+        }
+      }
+
       if (!shift) {
         badge.className = 'status-badge status-idle';
         badge.innerText = 'Ej inloggad';
@@ -2515,7 +2571,11 @@
         updateAppStatusIndicators(null, '');
         clearBackgroundNotification();
 
-        if (timerInterval) clearInterval(timerInterval);
+        if (timerWorker) {
+          timerWorker.postMessage('stop');
+          timerWorker.terminate();
+          timerWorker = null;
+        }
         return;
       }
 
@@ -2540,42 +2600,17 @@
         topStatusBar.className = 'top-status-bar status-active-break';
       }
 
-      function tick() {
-        const currentShift = getActiveShift() || shift;
-
-        let currentWorkedMs = Date.now() - currentShift.startTime - currentShift.breakTimeMs;
-        if (currentShift.status === 'break' && currentShift.breakStart) {
-          currentWorkedMs = currentShift.breakStart - currentShift.startTime - currentShift.breakTimeMs;
-        }
-
-        const sec = Math.floor((Math.max(0, currentWorkedMs) / 1000) % 60);
-        const min = Math.floor((Math.max(0, currentWorkedMs) / (1000 * 60)) % 60);
-        const hrs = Math.floor(Math.max(0, currentWorkedMs) / (1000 * 60 * 60));
-        const clockText = String(hrs).padStart(2, '0') + ':' + String(min).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
-
-        clock.innerText = clockText;
-
-        if (currentShift.status === 'working') {
-          subtext.innerText = `Startat kl ${new Date(currentShift.startTime).toTimeString().slice(0,5)}`;
-          topStatusText.innerText = `⏱️ ARBETAR: ${custName} (${clockText})`;
-          updateAppStatusIndicators(currentShift, clockText);
-          updateBackgroundNotification(`⏱️ Arbetar på ${custName}`, `Arbetad tid: ${clockText}`, true, false);
-        } else if (currentShift.status === 'break') {
-          const elapsedBreakMs = Date.now() - currentShift.breakStart;
-          const bSec = Math.floor((elapsedBreakMs / 1000) % 60);
-          const bMin = Math.floor((elapsedBreakMs / (1000 * 60)) % 60);
-          const breakClockText = String(bMin).padStart(2, '0') + ':' + String(bSec).padStart(2, '0');
-          
-          subtext.innerText = `På rast sedan ${new Date(currentShift.breakStart).toTimeString().slice(0,5)} (${breakClockText})`;
-          topStatusText.innerText = `☕ RAST: ${custName} (Rast: ${breakClockText})`;
-          updateAppStatusIndicators(currentShift, clockText);
-          updateBackgroundNotification(`☕ Rast på ${custName}`, `Rasttid: ${breakClockText}`, true, true);
-        }
-      }
-
       tick();
-      if (timerInterval) clearInterval(timerInterval);
-      timerInterval = setInterval(tick, 1000);
+
+      if (!timerWorker) {
+        timerWorker = new Worker(workerUrl);
+        timerWorker.onmessage = function(e) {
+          if (e.data === 'tick') {
+            tick();
+          }
+        };
+        timerWorker.postMessage('start');
+      }
     }
 
     document.addEventListener('visibilitychange', () => {
