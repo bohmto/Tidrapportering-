@@ -2410,6 +2410,8 @@
       }
 
       await requestNotificationPermission();
+      await requestWakeLock(); 
+      startBackgroundAudioKeepAlive();
 
       const breakDuration = parseInt(document.getElementById('live-break-duration').value, 10) || 0;
       const shift = {
@@ -2455,6 +2457,9 @@
       const shift = getActiveShift();
       if (!shift) return;
 
+      releaseWakeLock(); 
+      stopBackgroundAudioKeepAlive();
+
       let totalBreakMs = shift.breakTimeMs;
       let breaksList = shift.breaks ? [...shift.breaks] : [];
 
@@ -2499,7 +2504,80 @@
       alert(`Passet avslutat och sparat! (${workedHours} h arbetad tid)`);
     }
 
-    // --- UPPDATERAD DYNAMISK TIDTAGNING, RAST- OCH GRÄNSBEVAKNING ---
+    // --- WAKE LOCK & WEB AUDIO API (BAKGRUNDSKÖRNING) ---
+    let wakeLock = null;
+    let audioContext = null;
+    let silentAudioInterval = null;
+
+    async function requestWakeLock() {
+      if ('wakeLock' in navigator && document.visibilityState === 'visible') {
+        try {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.addEventListener('release', () => {
+            wakeLock = null;
+          });
+        } catch (err) {
+          console.error('Kunde inte begära Wake Lock:', err);
+        }
+      }
+    }
+
+    function releaseWakeLock() {
+      if (wakeLock) {
+        wakeLock.release().catch(() => {});
+        wakeLock = null;
+      }
+    }
+
+    function startBackgroundAudioKeepAlive() {
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        if (!audioContext) {
+          audioContext = new AudioContext();
+        }
+        if (audioContext.state === 'suspended') {
+          audioContext.resume();
+        }
+        if (!silentAudioInterval) {
+          silentAudioInterval = setInterval(() => {
+            if (!audioContext) return;
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            gainNode.gain.value = 0.00001;
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.1);
+          }, 15000);
+        }
+      } catch (e) {
+        console.error('Kunde inte starta audio keep-alive', e);
+      }
+    }
+
+    function stopBackgroundAudioKeepAlive() {
+      if (silentAudioInterval) {
+        clearInterval(silentAudioInterval);
+        silentAudioInterval = null;
+      }
+      if (audioContext) {
+        audioContext.close().catch(() => {});
+        audioContext = null;
+      }
+    }
+
+    document.addEventListener('visibilitychange', async () => {
+      if (!document.hidden) {
+        updateTimerUI();
+        const shift = getActiveShift();
+        if (shift && (shift.status === 'working' || shift.status === 'break')) {
+          await requestWakeLock();
+        }
+      }
+    });
+
+    // --- UPPDATERAD DYNAMISK TIDTAGNING OCH VÄGARBETSTIDS-NOTISER ---
     function updateTimerUI() {
       const shift = getActiveShift();
       const badge = document.getElementById('timer-badge');
@@ -2573,7 +2651,7 @@
 
         clock.innerText = clockText;
 
-        // --- BEVAKNING AV VÄGARBETSTID & LÅNGA PASS ( > 12h / 15h ) ---
+        // --- BEVAKNING AV VÄGARBETSTID & PUSH-NOTISER ---
         const enableRules = document.getElementById('enable-transport-rules')?.checked;
         if (enableRules) {
           complianceBox.style.display = 'block';
@@ -2581,30 +2659,33 @@
           const workedHours = currentWorkedMs / (1000 * 60 * 60);
           const totalBreakMins = Math.round((currentShift.breakTimeMs + (currentShift.status === 'break' ? (Date.now() - currentShift.breakStart) : 0)) / (1000 * 60));
 
-          // 1. Rastregler för långa pass
+          // 🚛 PUSH-NOTISER ENLIGT VÄGARBETSTIDSLAGEN & FÄRDSKRIVARE
+          if (currentShift.status === 'working') {
+            // Punkt 1: Varning vid 4 timmar
+            if (workedHours >= 4.0 && workedHours < 4.1 && !alarmStateMap['notified_4h']) {
+              alarmStateMap['notified_4h'] = true;
+              showNotification("⚠️ Rastvarning (Färdskrivare)", "Du har arbetat i 4 timmar. Planera in rast inom kort.");
+            }
+            // Punkt 2: Varning vid 5,5 timmar (Innan 6-timmarsgränsen)
+            if (workedHours >= 5.5 && workedHours < 5.6 && !alarmStateMap['notified_5.5h']) {
+              alarmStateMap['notified_5.5h'] = true;
+              showNotification("🚨 VIKTIGT: Vägarbetstidslagen", "Sista chansen att ta rast – mindre än 30 minuter kvar till 6-timmarsgränsen!");
+            }
+          }
+
           const latestFirstBreakTime = new Date(currentShift.startTime + 6 * 3600 * 1000);
           const firstBreakStr = latestFirstBreakTime.toTimeString().slice(0, 5);
-
-          let requiredBreakMins = 30;
-          if (workedHours > 9) {
-            requiredBreakMins = 45; // Vid pass över 9h krävs totalt 45 min rast
-          }
-          if (workedHours > 12) {
-            requiredBreakMins = 60; // Vid pass över 12h krävs minst 60 min
-          }
 
           let nextBreakInfo = '';
           if (totalBreakMins < 30) {
             const remainingForFirst = 30 - totalBreakMins;
             nextBreakInfo = `<strong>1:a rast:</strong> Senast kl <strong>${firstBreakStr}</strong> (Krav: 30 min, varav <strong>${remainingForFirst} min</strong> kvar).`;
           } else if (totalBreakMins < 45) {
-            const latestSecondBreakTime = new Date(currentShift.startTime + 9 * 3600 * 1000);
             nextBreakInfo = `✅ 30 min avklarat.<br><strong>2:a rast (15 min till):</strong> Tas senast vid 9h arbete (totalt 45 min).`;
           } else {
             nextBreakInfo = `✅ Fullständiga raster avklarade (totalt <strong>${totalBreakMins} min</strong> registrerade).`;
           }
 
-          // 2. Varningar för max gränser vid långa pass (12h och 15h)
           let shiftLimitWarning = '';
           if (workedHours >= 14) {
             shiftLimitWarning = `<div style="background: #991b1b; color: #fff; padding: 8px; border-radius: 6px; margin-top: 6px; font-weight: bold; font-size: 13px;">
@@ -2649,12 +2730,6 @@
       if (timerInterval) clearInterval(timerInterval);
       timerInterval = setInterval(tick, 1000);
     }
-
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) {
-        updateTimerUI();
-      }
-    });
 
     function autoCalculateHours() {
       const startTime = document.getElementById('time-start').value;
