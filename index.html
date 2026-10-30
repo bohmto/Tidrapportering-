@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="sv">
 <head>
@@ -572,9 +571,12 @@
 
     <div id="customer-list"></div>
 
-    <!-- SYNKRONISERING & BACKUP -->
+    <!-- SYNKRONISERING & BACKUP MED INFO-KNAPP -->
     <div class="card" style="margin-top: 32px;">
-      <h2 style="margin-bottom: 12px; font-size: 16px;">Moln- & Serversynkronisering</h2>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h2 style="margin: 0; font-size: 16px;">Moln- & Serversynkronisering</h2>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="showSyncHelp()" style="padding: 4px 10px; border-radius: 50%; font-weight: bold;">ℹ️ Info</button>
+      </div>
       
       <div class="form-group">
         <label for="syncMethod">Välj synkroniseringsmetod</label>
@@ -742,10 +744,13 @@
       </div>
     </div>
 
-    <!-- DYNAMISK VILOTIDSRÄKNARE -->
+    <!-- DYNAMISK VILOTIDSRÄKNARE MED INFO-KNAPP -->
     <div class="card" style="background: #f1f5f9; border: 1px solid var(--border);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h2 style="margin: 0; font-size: 16px; color: var(--primary);">📊 Beräknat Vilotidsbehov</h2>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <h2 style="margin: 0; font-size: 16px; color: var(--primary);">📊 Beräknat Vilotidsbehov</h2>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="showRestRulesHelp()" style="padding: 2px 8px; border-radius: 50%; font-size: 12px; font-weight: bold;">ℹ️</button>
+        </div>
         <button type="button" class="btn btn-secondary btn-sm" onclick="calculateRequiredRest()">🔄 Uppdatera</button>
       </div>
 
@@ -1003,6 +1008,33 @@
   </nav>
 
   <script>
+    // INFO-RUTOR POPUP-FUNKTIONER
+    function showSyncHelp() {
+      alert(
+        "ℹ️ OM MOLN- & SERVERSYNKRONISERING\n\n" +
+        "• Exportera / Dela säkerhetskopia:\n" +
+        "   Öppnar Androids delningsmeny så att du kan spara en fil direkt till Google Drive, OneDrive, skicka via e-post eller spara på enheten.\n\n" +
+        "• Synkronisera nu:\n" +
+        "   Skickar dina pass direkt till en egen WebDAV/API-server om du har ställt in en server-URL under inställningarna.\n\n" +
+        "• Automatiska säkerhetskopior:\n" +
+        "   Appen sparar automatiskt de 30 senaste ändringarna lokalt på enheten ifall du behöver återställa något."
+      );
+    }
+
+    function showRestRulesHelp() {
+      alert(
+        "ℹ️ REGLER FÖR KÖR- OCH VILOTID & VÄGARBETSTID\n\n" +
+        "• Ordinarie Dygnsvila (11h):\n" +
+        "   Du ska ha minst 11 timmars sammanhängande vila per 24-timmarsperiod.\n\n" +
+        "• Reducerad Dygnsvila (9h):\n" +
+        "   Får tas max 3 gånger mellan två veckovilor utan krav på kompensation.\n\n" +
+        "• Förkortad Veckovila (24h–45h):\n" +
+        "   Om du tar mindre än 45 timmars helgvila måste den förlorade tiden kompenseras med sammanhängande vila innan slutet av den 3:e veckan.\n\n" +
+        "• Vägarbetstidslagen (Max 60h/vecko-tak):\n" +
+        "   Arbetstiden får inte överstiga 60 timmar under en enskild vecka."
+      );
+    }
+
     let activeProfileId = localStorage.getItem('app_active_profile_id') || 'default_user';
 
     function getStorageKey(base) {
@@ -1051,26 +1083,7 @@
       }
     ];
 
-    let timerWorker = null;
-
-    // Inline Web Worker för att driva timern i bakgrunden utan att bli strypt av webbläsaren
-    const workerCode = `
-      let interval = null;
-      self.onmessage = function(e) {
-        if (e.data === 'start') {
-          if (interval) clearInterval(interval);
-          interval = setInterval(() => {
-            self.postMessage('tick');
-          }, 1000);
-        } else if (e.data === 'stop') {
-          if (interval) clearInterval(interval);
-          interval = null;
-        }
-      };
-    `;
-    const blob = new Blob([workerCode], { type: 'application/javascript' });
-    const workerUrl = URL.createObjectURL(blob);
-
+    let timerInterval = null;
     let alarmStateMap = {};
     let currentCalDate = new Date();
 
@@ -1135,7 +1148,6 @@
       });
     }
 
-    // --- ANMÄLNINGAR / NOTISER FÖR KOMMANDE PASS (24h & 12h) ---
     function checkUpcomingShiftNotifications() {
       if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
@@ -1155,13 +1167,11 @@
 
         if (!notifiedShifts[dateStr]) notifiedShifts[dateStr] = {};
 
-        // Påminnelse 24 timmar innan
         if (hoursLeft > 23.5 && hoursLeft <= 24.5 && !notifiedShifts[dateStr]['24h']) {
           showNotification(`📅 Påminnelse: Pass imorgon!`, `Du har ett planerat pass (${dateStr} kl. ${startTime}) om 24 timmar.`);
           notifiedShifts[dateStr]['24h'] = true;
         }
 
-        // Påminnelse 12 timmar innan
         if (hoursLeft > 11.5 && hoursLeft <= 12.5 && !notifiedShifts[dateStr]['12h']) {
           showNotification(`⏳ Påminnelse: Pass om 12 timmar!`, `Ditt pass (${dateStr} kl. ${startTime}) startar om 12 timmar.`);
           notifiedShifts[dateStr]['12h'] = true;
@@ -1187,7 +1197,6 @@
 
     setInterval(checkUpcomingShiftNotifications, 60000);
 
-    // --- FLERA ANVÄNDARE / PROFILER ---
     function getAllProfiles() {
       const stored = localStorage.getItem('app_user_profiles_list');
       if (stored) return JSON.parse(stored);
@@ -1245,7 +1254,6 @@
       alert(`Användare "${name.trim()}" skapad och aktiverad!`);
     }
 
-    // --- MIGRERING AV GAMLA RASTER ---
     function addMinutesToTime(timeStr, mins) {
       const [h, m] = timeStr.split(':').map(Number);
       let totalMins = h * 60 + m + mins;
@@ -1342,7 +1350,7 @@
       checkUpcomingShiftNotifications();
     }
 
-    function updateBackgroundNotification(title, body, isRunning, isBreak) {
+    function updateBackgroundNotification(title, body, isRunning, isBreak, startTimeMs) {
       if ('Notification' in window && Notification.permission === 'granted' && navigator.serviceWorker) {
         navigator.serviceWorker.ready.then(reg => {
           if (reg.active) {
@@ -1351,7 +1359,8 @@
               title: title,
               body: body,
               isRunning: isRunning,
-              isBreak: isBreak
+              isBreak: isBreak,
+              timestamp: startTimeMs || Date.now()
             });
           }
         });
@@ -1459,7 +1468,6 @@
       await performSync(backupObj, false);
     }
 
-    // Android-backup/export som använder Androids delningsmeny
     async function selectAndroidBackupFolder() {
       const backupObj = {
         version: "5.12",
@@ -2006,7 +2014,6 @@
         return;
       }
 
-      // Sortera pass kronologiskt efter datum och starttid
       const sorted = [...entries].sort((a, b) => {
         const dateA = new Date(`${a.date}T${a.startTime || '00:00'}`);
         const dateB = new Date(`${b.date}T${b.startTime || '00:00'}`);
@@ -2016,7 +2023,6 @@
       let reducedDailyCount = 0;
       let lastReducedWeekly = null;
 
-      // Gå igenom pass och analysera vilotider (glapp) mellan påföljande pass
       for (let i = 0; i < sorted.length - 1; i++) {
         const current = sorted[i];
         const next = sorted[i + 1];
@@ -2029,12 +2035,9 @@
 
         const restHours = (nextStart - currentEnd) / (1000 * 60 * 60);
 
-        // Klassificera vilan enligt kör- och vilotidslagen
         if (restHours >= 45) {
-          // Ordinarie veckovila (nollställer räknaren för reducerade dygnsvilor)
           reducedDailyCount = 0;
         } else if (restHours >= 24 && restHours < 45) {
-          // Förkortad veckovila (24-45h)
           reducedDailyCount = 0;
           const compDeadline = new Date(nextStart.getTime() + 21 * 24 * 60 * 60 * 1000);
           lastReducedWeekly = {
@@ -2044,7 +2047,6 @@
             deadline: compDeadline
           };
         } else if (restHours >= 9 && restHours < 11) {
-          // Reducerad dygnsvila (9-11h)
           reducedDailyCount++;
         }
       }
@@ -2053,7 +2055,6 @@
       let nextAllowedStartText = '';
       let warningsHtml = '';
 
-      // Kontrollera om max antal reducerade dygnsvilor (3 st) har förbrukats
       if (reducedDailyCount >= 3) {
         warningsHtml += `
           <div style="background:#fee2e2; color:#991b1b; padding:10px 12px; border-radius:8px; margin-bottom:10px; border:1px solid #fca5a5; font-size:13px; line-height:1.4;">
@@ -2070,7 +2071,6 @@
         `;
       }
 
-      // Kontrollera om det finns en förkortad helgvila som behöver kompenseras
       if (lastReducedWeekly) {
         const deadStr = lastReducedWeekly.deadline.toLocaleDateString('sv-SE', { weekday: 'short', month: 'numeric', day: 'numeric' });
         warningsHtml += `
@@ -2109,7 +2109,6 @@
         `;
       }
 
-      // Beräkna arbetad tid denna vecko-period (Vägarbetstidslagen)
       const now = new Date();
       const startOfWeek = new Date(now);
       const day = startOfWeek.getDay() || 7;
@@ -2165,7 +2164,6 @@
       scheduleAutoBackup('Pass sparat');
     }
 
-    // ===== AUTOMATISK BACKUP =====
     const AUTO_BACKUP_MAX = 30;
     let autoBackupTimer = null;
 
@@ -2515,43 +2513,6 @@
       const topStatusText = document.getElementById('top-status-text');
       const topStatusBar = document.getElementById('top-status-bar');
 
-      function tick() {
-        const currentShift = getActiveShift();
-        if (!currentShift) return;
-
-        let currentWorkedMs = Date.now() - currentShift.startTime - currentShift.breakTimeMs;
-        if (currentShift.status === 'break' && currentShift.breakStart) {
-          currentWorkedMs = currentShift.breakStart - currentShift.startTime - currentShift.breakTimeMs;
-        }
-
-        const sec = Math.floor((Math.max(0, currentWorkedMs) / 1000) % 60);
-        const min = Math.floor((Math.max(0, currentWorkedMs) / (1000 * 60)) % 60);
-        const hrs = Math.floor(Math.max(0, currentWorkedMs) / (1000 * 60 * 60));
-        const clockText = String(hrs).padStart(2, '0') + ':' + String(min).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
-
-        clock.innerText = clockText;
-
-        const cust = getCustomers().find(c => c.id === currentShift.customerId);
-        const custName = cust ? cust.name : 'Okänd kund';
-
-        if (currentShift.status === 'working') {
-          subtext.innerText = `Startat kl ${new Date(currentShift.startTime).toTimeString().slice(0,5)}`;
-          topStatusText.innerText = `⏱️ ARBETAR: ${custName} (${clockText})`;
-          updateAppStatusIndicators(currentShift, clockText);
-          updateBackgroundNotification(`⏱️ Arbetar på ${custName}`, `Arbetad tid: ${clockText}`, true, false);
-        } else if (currentShift.status === 'break') {
-          const elapsedBreakMs = Date.now() - currentShift.breakStart;
-          const bSec = Math.floor((elapsedBreakMs / 1000) % 60);
-          const bMin = Math.floor((elapsedBreakMs / (1000 * 60)) % 60);
-          const breakClockText = String(bMin).padStart(2, '0') + ':' + String(bSec).padStart(2, '0');
-          
-          subtext.innerText = `På rast sedan ${new Date(currentShift.breakStart).toTimeString().slice(0,5)} (${breakClockText})`;
-          topStatusText.innerText = `☕ RAST: ${custName} (Rast: ${breakClockText})`;
-          updateAppStatusIndicators(currentShift, clockText);
-          updateBackgroundNotification(`☕ Rast på ${custName}`, `Rasttid: ${breakClockText}`, true, true);
-        }
-      }
-
       if (!shift) {
         badge.className = 'status-badge status-idle';
         badge.innerText = 'Ej inloggad';
@@ -2571,11 +2532,7 @@
         updateAppStatusIndicators(null, '');
         clearBackgroundNotification();
 
-        if (timerWorker) {
-          timerWorker.postMessage('stop');
-          timerWorker.terminate();
-          timerWorker = null;
-        }
+        if (timerInterval) clearInterval(timerInterval);
         return;
       }
 
@@ -2600,17 +2557,42 @@
         topStatusBar.className = 'top-status-bar status-active-break';
       }
 
-      tick();
+      function tick() {
+        const currentShift = getActiveShift() || shift;
 
-      if (!timerWorker) {
-        timerWorker = new Worker(workerUrl);
-        timerWorker.onmessage = function(e) {
-          if (e.data === 'tick') {
-            tick();
-          }
-        };
-        timerWorker.postMessage('start');
+        let currentWorkedMs = Date.now() - currentShift.startTime - currentShift.breakTimeMs;
+        if (currentShift.status === 'break' && currentShift.breakStart) {
+          currentWorkedMs = currentShift.breakStart - currentShift.startTime - currentShift.breakTimeMs;
+        }
+
+        const sec = Math.floor((Math.max(0, currentWorkedMs) / 1000) % 60);
+        const min = Math.floor((Math.max(0, currentWorkedMs) / (1000 * 60)) % 60);
+        const hrs = Math.floor(Math.max(0, currentWorkedMs) / (1000 * 60 * 60));
+        const clockText = String(hrs).padStart(2, '0') + ':' + String(min).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+
+        clock.innerText = clockText;
+
+        if (currentShift.status === 'working') {
+          subtext.innerText = `Startat kl ${new Date(currentShift.startTime).toTimeString().slice(0,5)}`;
+          topStatusText.innerText = `⏱️ ARBETAR: ${custName} (${clockText})`;
+          updateAppStatusIndicators(currentShift, clockText);
+          updateBackgroundNotification(`⏱️ Arbetar på ${custName}`, `Startade kl ${new Date(currentShift.startTime).toTimeString().slice(0,5)}`, true, false, currentShift.startTime);
+        } else if (currentShift.status === 'break') {
+          const elapsedBreakMs = Date.now() - currentShift.breakStart;
+          const bSec = Math.floor((elapsedBreakMs / 1000) % 60);
+          const bMin = Math.floor((elapsedBreakMs / (1000 * 60)) % 60);
+          const breakClockText = String(bMin).padStart(2, '0') + ':' + String(bSec).padStart(2, '0');
+          
+          subtext.innerText = `På rast sedan ${new Date(currentShift.breakStart).toTimeString().slice(0,5)} (${breakClockText})`;
+          topStatusText.innerText = `☕ RAST: ${custName} (Rast: ${breakClockText})`;
+          updateAppStatusIndicators(currentShift, clockText);
+          updateBackgroundNotification(`☕ Rast på ${custName}`, `Rast sedan kl ${new Date(currentShift.breakStart).toTimeString().slice(0,5)}`, true, true, currentShift.breakStart);
+        }
       }
+
+      tick();
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(tick, 1000);
     }
 
     document.addEventListener('visibilitychange', () => {
@@ -3226,4 +3208,3 @@
   </script>
 </body>
 </html>
-```
