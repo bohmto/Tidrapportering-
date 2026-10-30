@@ -461,7 +461,7 @@
       </div>
 
       <!-- Live efterlevnadsbox -->
-      <div id="compliance-box" class="compliance-box"></div>
+      <div id="compliance-box" class="compliance-box" style="display: block; background: #334155; border: 1px solid #475569; margin-top: 14px; padding: 12px; border-radius: 8px;"></div>
 
       <div class="timer-buttons">
         <button id="btn-start" class="btn btn-success" onclick="startShift()">▶ Starta pass</button>
@@ -2499,6 +2499,7 @@
       alert(`Passet avslutat och sparat! (${workedHours} h arbetad tid)`);
     }
 
+    // --- UPPDATERAD DYNAMISK TIDTAGNING, RAST- OCH GRÄNSBEVAKNING ---
     function updateTimerUI() {
       const shift = getActiveShift();
       const badge = document.getElementById('timer-badge');
@@ -2571,6 +2572,60 @@
         const clockText = String(hrs).padStart(2, '0') + ':' + String(min).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
 
         clock.innerText = clockText;
+
+        // --- BEVAKNING AV VÄGARBETSTID & LÅNGA PASS ( > 12h / 15h ) ---
+        const enableRules = document.getElementById('enable-transport-rules')?.checked;
+        if (enableRules) {
+          complianceBox.style.display = 'block';
+
+          const workedHours = currentWorkedMs / (1000 * 60 * 60);
+          const totalBreakMins = Math.round((currentShift.breakTimeMs + (currentShift.status === 'break' ? (Date.now() - currentShift.breakStart) : 0)) / (1000 * 60));
+
+          // 1. Rastregler för långa pass
+          const latestFirstBreakTime = new Date(currentShift.startTime + 6 * 3600 * 1000);
+          const firstBreakStr = latestFirstBreakTime.toTimeString().slice(0, 5);
+
+          let requiredBreakMins = 30;
+          if (workedHours > 9) {
+            requiredBreakMins = 45; // Vid pass över 9h krävs totalt 45 min rast
+          }
+          if (workedHours > 12) {
+            requiredBreakMins = 60; // Vid pass över 12h krävs minst 60 min
+          }
+
+          let nextBreakInfo = '';
+          if (totalBreakMins < 30) {
+            const remainingForFirst = 30 - totalBreakMins;
+            nextBreakInfo = `<strong>1:a rast:</strong> Senast kl <strong>${firstBreakStr}</strong> (Krav: 30 min, varav <strong>${remainingForFirst} min</strong> kvar).`;
+          } else if (totalBreakMins < 45) {
+            const latestSecondBreakTime = new Date(currentShift.startTime + 9 * 3600 * 1000);
+            nextBreakInfo = `✅ 30 min avklarat.<br><strong>2:a rast (15 min till):</strong> Tas senast vid 9h arbete (totalt 45 min).`;
+          } else {
+            nextBreakInfo = `✅ Fullständiga raster avklarade (totalt <strong>${totalBreakMins} min</strong> registrerade).`;
+          }
+
+          // 2. Varningar för max gränser vid långa pass (12h och 15h)
+          let shiftLimitWarning = '';
+          if (workedHours >= 14) {
+            shiftLimitWarning = `<div style="background: #991b1b; color: #fff; padding: 8px; border-radius: 6px; margin-top: 6px; font-weight: bold; font-size: 13px;">
+              🚨 KRITISKT: Passet närmar sig eller har nått 15 timmar! Arbets- och körtid tar slut nu. Avsluta passet omedelbart för att säkra dygnsvilan!
+            </div>`;
+          } else if (workedHours >= 12) {
+            shiftLimitWarning = `<div style="background: #b45309; color: #fff; padding: 8px; border-radius: 6px; margin-top: 6px; font-weight: bold; font-size: 13px;">
+              ⚠️ VARNING: Passet har pågått i över 12 timmar. Kontrollera gällande dispens eller kollektivavtal för max passlängd.
+            </div>`;
+          } else if (workedHours >= 5.75 && totalBreakMins < 30) {
+            shiftLimitWarning = `<div style="color: #ef4444; font-weight: bold; margin-top: 4px;">⚠️ Varning: 6 timmars gräns utan rast närmar sig!</div>`;
+          }
+
+          complianceBox.innerHTML = `
+            <div style="font-size: 12px; color: #cbd5e1; font-weight: 600; margin-bottom: 4px;">🚛 Vägarbetstid & Passbevakning (${workedHours.toFixed(1)}h arbetat):</div>
+            <div style="font-size: 13px; color: #fff; line-height: 1.4;">${nextBreakInfo}</div>
+            ${shiftLimitWarning}
+          `;
+        } else {
+          complianceBox.style.display = 'none';
+        }
 
         if (currentShift.status === 'working') {
           subtext.innerText = `Startat kl ${new Date(currentShift.startTime).toTimeString().slice(0,5)}`;
