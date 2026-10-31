@@ -2651,6 +2651,10 @@
 
         clock.innerText = clockText;
 
+        const startTimeStr = new Date(currentShift.startTime).toTimeString().slice(0, 5);
+        const latestFirstBreakTime = new Date(currentShift.startTime + 6 * 3600 * 1000);
+        const firstBreakStr = latestFirstBreakTime.toTimeString().slice(0, 5);
+
         // --- BEVAKNING AV VÄGARBETSTID & PUSH-NOTISER ---
         const enableRules = document.getElementById('enable-transport-rules')?.checked;
         if (enableRules) {
@@ -2672,9 +2676,6 @@
               showNotification("🚨 VIKTIGT: Vägarbetstidslagen", "Sista chansen att ta rast – mindre än 30 minuter kvar till 6-timmarsgränsen!");
             }
           }
-
-          const latestFirstBreakTime = new Date(currentShift.startTime + 6 * 3600 * 1000);
-          const firstBreakStr = latestFirstBreakTime.toTimeString().slice(0, 5);
 
           let nextBreakInfo = '';
           if (totalBreakMins < 30) {
@@ -2709,10 +2710,10 @@
         }
 
         if (currentShift.status === 'working') {
-          subtext.innerText = `Startat kl ${new Date(currentShift.startTime).toTimeString().slice(0,5)}`;
-          topStatusText.innerText = `⏱️ ARBETAR: ${custName} (${clockText})`;
+          subtext.innerText = `Startat kl ${startTimeStr} | 1:a rast senast kl ${firstBreakStr}`;
+          topStatusText.innerText = `⏱️ ARBETAR: ${custName} (${clockText}) • 1:a rast senast ${firstBreakStr}`;
           updateAppStatusIndicators(currentShift, clockText);
-          updateBackgroundNotification(`⏱️ Arbetar på ${custName}`, `Startade kl ${new Date(currentShift.startTime).toTimeString().slice(0,5)}`, true, false, currentShift.startTime);
+          updateBackgroundNotification(`⏱️ Arbetar på ${custName}`, `Startade kl ${startTimeStr} | 1:a rast senast kl ${firstBreakStr}`, true, false, currentShift.startTime);
         } else if (currentShift.status === 'break') {
           const elapsedBreakMs = Date.now() - currentShift.breakStart;
           const bSec = Math.floor((elapsedBreakMs / 1000) % 60);
@@ -3292,7 +3293,7 @@
         ob_weekend_rate_value: parseFloat(document.getElementById('field-ob-weekend-value').value) === 0 ? 0 : (parseFloat(document.getElementById('field-ob-weekend-value').value) || 1.0),
         
         ot_enabled: document.getElementById('field-ot-enabled').checked,
-        ot_monthly_cap: parseFloat(document.getElementById('field-ot-monthly-cap').value) || 160,
+        ot_monthly_cap: parseFloat(document.getElementById('field-ot-monthly-cap').value) === 0 ? 0 : (parseFloat(document.getElementById('field-ot-monthly-cap').value) || 160),
         ot_rate_type: document.getElementById('field-ot-rate-type').value,
         ot_simple_value: parseFloat(document.getElementById('field-ot-simple-val').value) || 1.5,
         ot_qual_value: parseFloat(document.getElementById('field-ot-qual-val').value) || 2.0,
