@@ -2348,8 +2348,46 @@
     }
 
     async function saveOrShareFile(content, filename, mimeType) {
-      const file = new File([content], filename, { type: mimeType });
+      const isNative = window.Capacitor && window.Capacitor.isNativePlatform();
 
+      if (isNative) {
+        try {
+          const { Filesystem, Directory, Encoding } = window.Capacitor.Plugins.Filesystem;
+          const { Share } = window.Capacitor.Plugins;
+
+          let writeData = content;
+          let isBase64 = false;
+
+          if (content instanceof ArrayBuffer || ArrayBuffer.isView(content)) {
+            const bytes = new Uint8Array(content);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) {
+              binary += String.fromCharCode(bytes[i]);
+            }
+            writeData = btoa(binary);
+            isBase64 = true;
+          }
+
+          const savedFile = await Filesystem.writeFile({
+            path: filename,
+            data: writeData,
+            directory: Directory.Cache,
+            ...(isBase64 ? {} : { encoding: Encoding.UTF8 })
+          });
+
+          await Share.share({
+            title: filename,
+            text: 'Här är din exportfil från Tidsrapportering',
+            url: savedFile.uri,
+            dialogTitle: 'Spara eller dela fil'
+          });
+          return;
+        } catch (err) {
+          console.warn('Capacitor native save/share misslyckades, fallar tillbaka:', err);
+        }
+      }
+
+      const file = new File([content], filename, { type: mimeType });
       if ('showSaveFilePicker' in window) {
         try {
           const ext = '.' + filename.split('.').pop();
@@ -2794,63 +2832,103 @@
     });
 
     function calculateEntryCost(entry, customer) {
-      if (!customer || !entry) return { totalHours: 0, cost: 0, obHours: 0, obCost: 0, breakMin: 0, obTypeLabel: '' };
+      if (!customer || !entry) return { totalHours: 0, cost: 0, regularHours: 0, regularCost: 0, obHours: 0, obCost: 0, breakMin: 0, obTypeLabel: '' };
 
       const breakMin = parseInt(entry.breakMin, 10) || 0;
       let totalHours = safeNum(entry.hours);
-
       const rate = safeNum(customer.hourly_rate);
-      let cost = totalHours * rate;
-      
+
+      if (totalHours <= 0) {
+        return { totalHours: 0, cost: 0, regularHours: 0, regularCost: 0, obHours: 0, obCost: 0, breakMin, obTypeLabel: '' };
+      }
+
       let obHours = 0;
-      let obCost = 0;
       let obTypeLabel = '';
 
-      if (customer.ob_enabled && totalHours > 0) {
+      if (customer.ob_enabled && entry.startTime && entry.endTime) {
         const dateStr = entry.date || '2026-01-01';
-        const start = entry.startTime ? new Date(`${dateStr}T${entry.startTime}`) : new Date(dateStr);
+        const start = new Date(`${dateStr}T${entry.startTime}`);
+        let end = new Date(`${dateStr}T${entry.endTime}`);
+        if (end < start) end.setDate(end.getDate() + 1);
+
         const dayOfWeek = start.getDay();
         const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
 
         if (isWeekend && customer.ob_weekend_enabled) {
           obHours = totalHours;
           obTypeLabel = 'Helg-OB';
-          if (customer.ob_weekend_rate_type === 'multiplier') {
-            const factor = safeNum(customer.ob_weekend_rate_value, 1);
-            cost = totalHours * rate * factor;
-            obCost = totalHours * rate * (factor - 1);
-          } else {
-            const addon = safeNum(customer.ob_weekend_rate_value);
-            cost = totalHours * (rate + addon);
-            obCost = totalHours * addon;
-          }
-        } else if (entry.startTime) {
-          const obStartHr = parseInt((customer.ob_start_time || '18:00').split(':')[0], 10);
-          const startHr = start.getHours();
+        } else if (!isWeekend) {
+          const [obStartH, obStartM] = (customer.ob_start_time || '18:00').split(':').map(Number);
+          const [obEndH, obEndM] = (customer.ob_end_time || '06:00').split(':').map(Number);
+          
+          let curr = new Date(start);
+          let obMinsCount = 0;
 
-          if (startHr >= obStartHr || startHr < 6) {
-            obHours = totalHours;
-            obTypeLabel = 'Vardags-OB';
-            if (customer.ob_rate_type === 'multiplier') {
-              const factor = safeNum(customer.ob_rate_value, 1);
-              cost = totalHours * rate * factor;
-              obCost = totalHours * rate * (factor - 1);
+          while (curr < end) {
+            let nextMin = new Date(curr.getTime() + 60000);
+            if (nextMin > end) nextMin = new Date(end);
+
+            const h = curr.getHours();
+            const m = curr.getMinutes();
+            const timeVal = h * 60 + m;
+
+            const startObVal = obStartH * 60 + obStartM;
+            const endObVal = obEndH * 60 + obEndM;
+
+            let isObActive = false;
+            if (startObVal > endObVal) {
+              if (timeVal >= startObVal || timeVal < endObVal) {
+                isObActive = true;
+              }
             } else {
-              const addon = safeNum(customer.ob_rate_value);
-              cost = totalHours * (rate + addon);
-              obCost = totalHours * addon;
+              if (timeVal >= startObVal && timeVal < endObVal) {
+                isObActive = true;
+              }
             }
+
+            if (isObActive) obMinsCount++;
+            curr = nextMin;
+          }
+
+          if (obMinsCount > 0) {
+            obHours = Number((obMinsCount / 60).toFixed(2));
+            obTypeLabel = 'Vardags-OB';
           }
         }
       }
 
+      let regularHours = Math.max(0, Number((totalHours - obHours).toFixed(2)));
+      let regularCost = regularHours * rate;
+      let obCost = 0;
+
+      if (obHours > 0) {
+        const isWeekend = ((new Date(`${entry.date || '2026-01-01'}T${entry.startTime}`).getDay() % 6) === 0);
+        let rateType = customer.ob_rate_type;
+        let rateVal = safeNum(customer.ob_rate_value, 1.5);
+
+        if (isWeekend && customer.ob_weekend_enabled) {
+          rateType = customer.ob_weekend_rate_type;
+          rateVal = safeNum(customer.ob_weekend_rate_value, 2.0);
+        }
+
+        if (rateType === 'multiplier') {
+          obCost = obHours * rate * rateVal;
+        } else {
+          obCost = obHours * (rate + rateVal);
+        }
+      }
+
+      let totalCost = Math.round(regularCost + obCost);
+
       return {
         totalHours: safeNum(totalHours.toFixed(2)),
-        cost: Math.round(safeNum(cost)),
-        obHours: safeNum(obHours.toFixed(2)), 
-        obCost: Math.round(safeNum(obCost)),
-        breakMin: breakMin,
-        obTypeLabel: obTypeLabel
+        regularHours,
+        regularCost: Math.round(regularCost),
+        obHours: safeNum(obHours.toFixed(2)),
+        obCost: Math.round(obCost),
+        cost: totalCost,
+        breakMin,
+        obTypeLabel
       };
     }
 
@@ -2921,7 +2999,7 @@
 
         let obDisplay = '';
         if (calc.obCost > 0) {
-          obDisplay = `<span style="color:var(--warning); font-size:13px;">(varav ${calc.obTypeLabel}: +${calc.obCost.toLocaleString('sv-SE')} kr)</span>`;
+          obDisplay = `<span style="color:var(--warning); font-size:13px;">(OB: ${calc.obHours} h, +${calc.obCost.toLocaleString('sv-SE')} kr)</span>`;
         }
 
         const card = document.createElement('div');
@@ -2938,7 +3016,7 @@
             </div>
           </div>
           <div style="margin-top:10px; font-size:14px;">
-            <span>⏱️ Tid: <strong>${calc.totalHours} h</strong></span> | 
+            <span>⏱️ Tid: <strong>${calc.totalHours} h</strong> (Ordinarie: ${calc.regularHours}h, OB: ${calc.obHours}h)</span> | 
             <span>💰 Summa: <strong>${calc.cost.toLocaleString('sv-SE')} kr</strong> ${obDisplay}</span>
           </div>
           ${breaksText}
@@ -3063,24 +3141,22 @@
       if (filtered.length === 0) { alert('Inga pass att exportera.'); return; }
 
       const sheetData = [
-        ["Datum", "Kund", "Starttid", "Sluttid", "Rasttider", "Obetald rast (min)", "Betald tid (h)", "Timpris (kr)", "OB-typ", "OB-tid (h)", "OB-tillägg (kr)", "Beskrivning", "Totalt (kr)"]
+        ["Datum", "Kund", "Starttid", "Sluttid", "Obetald rast (min)", "Ordinära timmar (h)", "OB-timmar (h)", "Timpris (kr)", "OB-typ", "OB-tillägg (kr)", "Beskrivning", "Totalt (kr)"]
       ];
 
       filtered.forEach(e => {
         const cust = customers.find(c => c.id === e.customerId);
         const calc = calculateEntryCost(e, cust);
-        const breaksStr = e.breaks && e.breaks.length > 0 ? e.breaks.map(b => `${b.start || '??'}–${b.end || '??'}`).join(', ') : '-';
         sheetData.push([
           e.date || '',
           cust ? cust.name : 'Okänd',
           e.startTime || '',
           e.endTime || '',
-          breaksStr,
           calc.breakMin,
-          calc.totalHours,
+          calc.regularHours,
+          calc.obHours,
           cust ? cust.hourly_rate : 0,
           calc.obTypeLabel || '-',
-          calc.obHours,
           calc.obCost,
           e.desc || '',
           calc.cost
@@ -3120,12 +3196,11 @@
       const customers = getCustomers();
       if (filtered.length === 0) { alert('Inga pass att exportera.'); return; }
 
-      let csv = "Datum;Kund;Starttid;Sluttid;Rasttider;Obetald rast (min);Betald tid (h);Timpris (kr);OB-typ;OB-tid (h);OB-tillägg (kr);Beskrivning;Totalt (kr)\n";
+      let csv = "Datum;Kund;Starttid;Sluttid;Obetald rast (min);Ordinära timmar (h);OB-timmar (h);Timpris (kr);OB-typ;OB-tillägg (kr);Beskrivning;Totalt (kr)\n";
       filtered.forEach(e => {
         const cust = customers.find(c => c.id === e.customerId);
         const calc = calculateEntryCost(e, cust);
-        const breaksStr = e.breaks && e.breaks.length > 0 ? e.breaks.map(b => `${b.start || '??'}–${b.end || '??'}`).join(', ') : '';
-        csv += `${e.date || ''};"${cust ? cust.name : 'Okänd'}";${e.startTime || ''};${e.endTime || ''};"${breaksStr}";${calc.breakMin};${calc.totalHours};${cust ? cust.hourly_rate : 0};"${calc.obTypeLabel || ''}";${calc.obHours};${calc.obCost};"${e.desc || ''}";${calc.cost}\n`;
+        csv += `${e.date || ''};"${cust ? cust.name : 'Okänd'}";${e.startTime || ''};${e.endTime || ''};${calc.breakMin};${calc.regularHours};${calc.obHours};${cust ? cust.hourly_rate : 0};"${calc.obTypeLabel || ''}";${calc.obCost};"${e.desc || ''}";${calc.cost}\n`;
       });
 
       csv += "\nMÅNADSSAMMANSTÄLLNING PER KUND\n";
