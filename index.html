@@ -559,8 +559,24 @@
       </div>
     </div>
 
-    <div class="header" style="margin-top: 20px;">
-      <h2>Rapporterade pass</h2>
+    <div class="header" style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+      <h2 style="margin: 0;">Rapporterade pass</h2>
+      <div style="min-width: 180px;">
+        <select id="view-mode-select" onchange="renderTimeEntries()" style="padding: 6px 10px; font-size: 14px; background: #fff; border-radius: 6px; border: 1px solid var(--border);">
+          <option value="running">Visning: Löpande (alla)</option>
+          <option value="monthly">Visning: Per månad</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- MÅNADSFILTER (VISAS ENDAST VID MÅNADSLÄGE) -->
+    <div id="month-filter-container" class="card" style="display: none; background: #f1f5f9; padding: 10px 14px; margin-bottom: 12px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <label for="select-month-filter" style="margin: 0; font-size: 13px; font-weight: 600;">Välj månad:</label>
+        <select id="select-month-filter" onchange="renderTimeEntries()" style="padding: 6px 10px; font-size: 14px; flex: 1;">
+          <!-- Genereras dynamiskt -->
+        </select>
+      </div>
     </div>
 
     <div id="time-list"></div>
@@ -1454,7 +1470,7 @@
 
     async function triggerManualSync() {
       const backupObj = {
-        version: "5.16",
+        version: "5.17",
         profileId: activeProfileId,
         exportDate: new Date().toISOString(),
         customers: getCustomers(),
@@ -1467,7 +1483,7 @@
 
     async function selectAndroidBackupFolder() {
       const backupObj = {
-        version: "5.16",
+        version: "5.17",
         profileId: activeProfileId,
         exportDate: new Date().toISOString(),
         customers: getCustomers(),
@@ -2166,7 +2182,7 @@
 
     function buildBackupObject() {
       return {
-        version: "5.16",
+        version: "5.17",
         profileId: activeProfileId,
         exportDate: new Date().toISOString(),
         customers: getCustomers(),
@@ -2860,25 +2876,66 @@
       const customers = getCustomers();
       const listContainer = document.getElementById('time-list');
       const overviewContainer = document.getElementById('monthly-overview');
+      const viewMode = document.getElementById('view-mode-select').value;
+      const monthFilterContainer = document.getElementById('month-filter-container');
+      const monthSelect = document.getElementById('select-month-filter');
+
       listContainer.innerHTML = '';
       overviewContainer.innerHTML = '';
 
       if (entries.length === 0) {
+        monthFilterContainer.style.display = 'none';
         listContainer.innerHTML = '<div class="card" style="text-align:center; color: var(--text-muted);">Inga sparade pass ännu.</div>';
+        return;
+      }
+
+      // Bygg månadsväljarens alternativ om månadsvy är vald
+      let availableMonths = [];
+      entries.forEach(e => {
+        if (e.date && e.date.length >= 7) {
+          const ym = e.date.slice(0, 7); // ÅÅÅÅ-MM
+          if (!availableMonths.includes(ym)) availableMonths.push(ym);
+        }
+      });
+      availableMonths.sort().reverse();
+
+      if (viewMode === 'monthly') {
+        monthFilterContainer.style.display = 'block';
+        const currentSelectedMonth = monthSelect.value;
+        monthSelect.innerHTML = '';
+        availableMonths.forEach(ym => {
+          const [y, m] = ym.split('-');
+          const monthNames = ["", "Januari", "Februari", "Mars", "April", "Maj", "Juni", "Juli", "Augusti", "September", "Oktober", "November", "December"];
+          const label = `${monthNames[parseInt(m, 10)]} ${y}`;
+          monthSelect.innerHTML += `<option value="${ym}" ${ym === currentSelectedMonth ? 'selected' : ''}>${label}</option>`;
+        });
+      } else {
+        monthFilterContainer.style.display = 'none';
+      }
+
+      // Filtrera baserat på visningsläge
+      let activeEntries = entries;
+      if (viewMode === 'monthly' && monthSelect.value) {
+        const selectedYM = monthSelect.value;
+        activeEntries = entries.filter(e => e.date && e.date.startsWith(selectedYM));
+      }
+
+      if (activeEntries.length === 0) {
+        listContainer.innerHTML = '<div class="card" style="text-align:center; color: var(--text-muted);">Inga pass hittades för vald månad.</div>';
         return;
       }
 
       let grandTotalHours = 0;
       let grandTotalCost = 0;
 
-      entries.forEach(entry => {
+      activeEntries.forEach(entry => {
         const cust = customers.find(c => c.id === entry.customerId);
         const calc = calculateEntryCost(entry, cust);
         grandTotalHours += calc.totalHours;
         grandTotalCost += calc.cost;
       });
 
-      entries.slice(0, 15).forEach(entry => {
+      activeEntries.forEach(entry => {
         const cust = customers.find(c => c.id === entry.customerId);
         const calc = calculateEntryCost(entry, cust);
         
@@ -2920,7 +2977,7 @@
       summaryCard.style.color = '#fff';
       summaryCard.style.marginTop = '16px';
       summaryCard.innerHTML = `
-        <h3 style="margin:0 0 8px 0; font-size:16px; color:#38bdf8;">📊 Total sammanställning</h3>
+        <h3 style="margin:0 0 8px 0; font-size:16px; color:#38bdf8;">📊 Sammanställning (${viewMode === 'monthly' ? monthSelect.value : 'Alla pass'})</h3>
         <div style="display:flex; justify-content:space-between; font-size:15px; margin-top:6px;">
           <span>Total arbetstid: <strong>${Number(grandTotalHours.toFixed(2))} h</strong></span>
           <span>Totalsumma: <strong>${Math.round(grandTotalCost).toLocaleString('sv-SE')} kr</strong></span>
@@ -3013,7 +3070,6 @@
       if (endM < startM) endM += 24 * 60;
       const obStartM = timeToMins("18:00");
 
-      // Om passet passerar eller startar efter 18:00 på vardag
       if (!isWk && startM < obStartM && endM > obStartM) {
         const hoursBefore18 = calculateHoursBetween(startTime, "18:00", entry.breakMin);
         if (hoursBefore18 > 0) {
@@ -3222,7 +3278,7 @@
     }
 
     async function exportData() {
-      const backupObj = { version: "5.16", profileId: activeProfileId, customers: getCustomers(), entries: getTimeEntries(), client: getClientInfo(), schedule: getScheduleInfo() };
+      const backupObj = { version: "5.17", profileId: activeProfileId, customers: getCustomers(), entries: getTimeEntries(), client: getClientInfo(), schedule: getScheduleInfo() };
       await saveOrShareFile(JSON.stringify(backupObj, null, 2), `backup_${activeProfileId}.json`, 'application/json');
     }
 
