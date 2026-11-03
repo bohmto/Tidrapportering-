@@ -1013,7 +1013,6 @@
   </nav>
 
   <script>
-    // INFO-RUTOR POPUP-FUNKTIONER
     function showSyncHelp() {
       alert(
         "ℹ️ OM MOLN- & SERVERSYNKRONISERING\n\n" +
@@ -1082,7 +1081,6 @@
     let alarmStateMap = {};
     let currentCalDate = new Date();
 
-    // --- FLIK-SVEPNING (SWIPE) ---
     const tabsList = ['time', 'customers', 'client'];
     let touchStartX = 0;
     let touchEndX = 0;
@@ -1456,7 +1454,7 @@
 
     async function triggerManualSync() {
       const backupObj = {
-        version: "5.14",
+        version: "5.16",
         profileId: activeProfileId,
         exportDate: new Date().toISOString(),
         customers: getCustomers(),
@@ -1469,7 +1467,7 @@
 
     async function selectAndroidBackupFolder() {
       const backupObj = {
-        version: "5.14",
+        version: "5.16",
         profileId: activeProfileId,
         exportDate: new Date().toISOString(),
         customers: getCustomers(),
@@ -2168,7 +2166,7 @@
 
     function buildBackupObject() {
       return {
-        version: "5.14",
+        version: "5.16",
         profileId: activeProfileId,
         exportDate: new Date().toISOString(),
         customers: getCustomers(),
@@ -2431,7 +2429,7 @@
       const shift = {
         customerId,
         startTime: Date.now(),
-        lastPeriodStart: Date.now(), // Håll koll på start för aktiv period (nollställs efter rast)
+        lastPeriodStart: Date.now(),
         breakTimeMs: 0,
         breakStart: null,
         breaks: [],
@@ -2456,10 +2454,8 @@
         const breakDurationMs = breakEnd - shift.breakStart;
         shift.breakTimeMs += breakDurationMs;
 
-        // NOLLSTÄLLNING AV RÄKNARE EFTER RAST:
-        // Vi sätter lastPeriodStart till nu för att påbörja en ny period/räknare efter avslutad rast
         shift.lastPeriodStart = Date.now();
-        alarmStateMap = {}; // Nollställ larm så nya periodens varningar triggas korrekt
+        alarmStateMap = {};
 
         if (!shift.breaks) shift.breaks = [];
         shift.breaks.push({
@@ -2672,12 +2668,10 @@
 
         const startTimeStr = new Date(currentShift.startTime).toTimeString().slice(0, 5);
         
-        // Beräkna tid i nuvarande period (nollställs efter varje avslutad rast)
         const periodStart = currentShift.lastPeriodStart || currentShift.startTime;
         const periodWorkedMs = Date.now() - periodStart - (currentShift.status === 'break' ? (Date.now() - currentShift.breakStart) : 0);
         const periodWorkedHours = Math.max(0, periodWorkedMs) / (1000 * 60 * 60);
 
-        // Tid kvar till nästa rast i nuvarande period (ex. 4 eller 6 timmar)
         const latestNextBreakTime = new Date(periodStart + 4 * 3600 * 1000);
         const firstBreakStr = latestNextBreakTime.toTimeString().slice(0, 5);
 
@@ -2947,27 +2941,36 @@
       const fromDate = document.getElementById('export-from-date').value;
       const toDate = document.getElementById('export-to-date').value;
 
-      return entries.filter(e => {
+      let filtered = entries.filter(e => {
         if (custFilter !== 'all' && e.customerId !== custFilter) return false;
         if (fromDate && e.date < fromDate) return false;
         if (toDate && e.date > toDate) return false;
         return true;
       });
+
+      // Sortera i stigande datumordning (äldst först, nyast sist)
+      filtered.sort((a, b) => new Date(a.date || '') - new Date(b.date || ''));
+      return filtered;
     }
 
-    // --- HJÄLPFUNKTIONER FÖR HELG & OB-SPLITTNING ---
     function isWeekend(dateStr) {
       if (!dateStr) return false;
       const d = new Date(dateStr + 'T00:00:00');
       const day = d.getDay();
-      return day === 0 || day === 6; // Söndag eller Lördag
+      return day === 0 || day === 6;
+    }
+
+    function timeToMins(tStr) {
+      if (!tStr) return 0;
+      const [h, m] = tStr.split(':').map(Number);
+      return h * 60 + m;
     }
 
     function calculateHoursBetween(startStr, endStr, breakMins = 0) {
-      if (!startStr || !endStr) return 0;
-      const [sh, sm] = startStr.split(':').map(Number);
-      const [eh, em] = endStr.split(':').map(Number);
-      let totalMins = (eh * 60 + em) - (sh * 60 + sm) - breakMins;
+      const startMins = timeToMins(startStr);
+      let endMins = timeToMins(endStr);
+      if (endMins < startMins) endMins += 24 * 60;
+      let totalMins = (endMins - startMins) - breakMins;
       return Math.max(0, Number((totalMins / 60).toFixed(2)));
     }
 
@@ -2981,7 +2984,6 @@
       const desc = entry.desc || "";
       const isWk = isWeekend(entry.date);
 
-      // 1. HELG-OB
       if (isWk && customer && customer.ob_enabled && customer.ob_weekend_enabled) {
         let wkndRate = baseRate;
         if (customer.ob_weekend_rate_type === 'multiplier') {
@@ -3006,23 +3008,30 @@
         return rows;
       }
 
-      // 2. VARDAGS-OB (SPLITT NÄR PASS PASSAR 18:00)
-      if (!isWk && startTime < "18:00" && endTime > "18:00") {
-        const hoursBefore18 = calculateHoursBetween(startTime, "18:00", entry.breakMin);
-        rows.push({
-          date: entry.date,
-          startTime: startTime,
-          endTime: "18:00",
-          breakMin: entry.breakMin || 0,
-          hours: hoursBefore18,
-          rate: baseRate,
-          cost: Math.round(hoursBefore18 * baseRate * 100) / 100,
-          project: proj,
-          customerName: custName,
-          desc: desc
-        });
+      const startM = timeToMins(startTime);
+      let endM = timeToMins(endTime);
+      if (endM < startM) endM += 24 * 60;
+      const obStartM = timeToMins("18:00");
 
-        const hoursAfter18 = calculateHoursBetween("18:00", endTime, 0);
+      // Om passet passerar eller startar efter 18:00 på vardag
+      if (!isWk && startM < obStartM && endM > obStartM) {
+        const hoursBefore18 = calculateHoursBetween(startTime, "18:00", entry.breakMin);
+        if (hoursBefore18 > 0) {
+          rows.push({
+            date: entry.date,
+            startTime: startTime,
+            endTime: "18:00",
+            breakMin: entry.breakMin || 0,
+            hours: hoursBefore18,
+            rate: baseRate,
+            cost: Math.round(hoursBefore18 * baseRate * 100) / 100,
+            project: proj,
+            customerName: custName,
+            desc: desc
+          });
+        }
+
+        const hoursAfter18 = calculateHoursBetween("18:00", endTime, hoursBefore18 > 0 ? 0 : entry.breakMin);
         let obRate = baseRate;
         if (customer && customer.ob_enabled) {
           obRate = customer.ob_rate_type === 'multiplier' 
@@ -3030,22 +3039,24 @@
             : baseRate + (customer.ob_rate_value || 0);
         }
 
-        rows.push({
-          date: entry.date,
-          startTime: "18:00",
-          endTime: endTime,
-          breakMin: 0,
-          hours: hoursAfter18,
-          rate: obRate,
-          cost: Math.round(hoursAfter18 * obRate * 100) / 100,
-          project: proj + " (Vardags-OB)",
-          customerName: custName,
-          desc: (desc ? desc + " - " : "") + "OB-tid efter 18:00"
-        });
+        if (hoursAfter18 > 0) {
+          rows.push({
+            date: entry.date,
+            startTime: "18:00",
+            endTime: endTime,
+            breakMin: hoursBefore18 > 0 ? 0 : (entry.breakMin || 0),
+            hours: hoursAfter18,
+            rate: obRate,
+            cost: Math.round(hoursAfter18 * obRate * 100) / 100,
+            project: proj + " (Vardags-OB)",
+            customerName: custName,
+            desc: (desc ? desc + " - " : "") + "OB-tid efter 18:00"
+          });
+        }
       } else {
         let effectiveRate = baseRate;
         let projSuffix = "";
-        if (!isWk && startTime >= "18:00" && customer && customer.ob_enabled) {
+        if (!isWk && startM >= obStartM && customer && customer.ob_enabled) {
           effectiveRate = customer.ob_rate_type === 'multiplier'
             ? baseRate * (customer.ob_rate_value || 1.5)
             : baseRate + (customer.ob_rate_value || 0);
@@ -3073,7 +3084,6 @@
       return rows;
     }
 
-    // --- UPPDATERAD EXCEL-EXPORT (UTAN ICA I RUBRIK OCH UTAN PROJEKT/KUND PÅ RAST-ARK) ---
     async function exportExcel() {
       if (typeof XLSX === 'undefined') {
         alert("Excel-biblioteket kunde inte laddas.");
@@ -3086,13 +3096,12 @@
       const client = getClientInfo();
       const clientName = client.name || 'T Nyström Böhm';
 
-      let minDate = filtered[filtered.length - 1].date;
-      let maxDate = filtered[0].date;
+      let minDate = filtered[0].date;
+      let maxDate = filtered[filtered.length - 1].date;
 
       let totalHoursSum = 0;
       let totalCostSum = 0;
 
-      // FLIK 2: TID
       const tidSheetRows = [
         [`Tidrapport ${clientName}`],
         [],
@@ -3127,7 +3136,6 @@
         "Totalt", "", "", "", Number(totalHoursSum.toFixed(2)), "", Number(totalCostSum.toFixed(2)), "", "", ""
       ]);
 
-      // FLIK 1: SAMMANFATTNING
       const sammRows = [
         [`Tidrapport - Sammanfattning`],
         ["Användare:", clientName],
@@ -3138,7 +3146,6 @@
         ["Total ersättning", `${Number(totalCostSum.toFixed(2))} kr`]
       ];
 
-      // FLIK 3: RAST (Utan projekt och kund)
       const rastSheetRows = [
         ["Datum", "Start", "Slut", "Varaktighet (h)"]
       ];
@@ -3182,7 +3189,6 @@
       await saveOrShareFile(excelBuffer, `Tidrapport_${clientName}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     }
 
-    // --- UPPDATERAD CSV EXPORT ---
     async function exportCSV() {
       const filtered = getFilteredEntriesForExport();
       const customers = getCustomers();
@@ -3216,7 +3222,7 @@
     }
 
     async function exportData() {
-      const backupObj = { version: "5.14", profileId: activeProfileId, customers: getCustomers(), entries: getTimeEntries(), client: getClientInfo(), schedule: getScheduleInfo() };
+      const backupObj = { version: "5.16", profileId: activeProfileId, customers: getCustomers(), entries: getTimeEntries(), client: getClientInfo(), schedule: getScheduleInfo() };
       await saveOrShareFile(JSON.stringify(backupObj, null, 2), `backup_${activeProfileId}.json`, 'application/json');
     }
 
@@ -3370,7 +3376,7 @@
         ot_monthly_cap: parseFloat(document.getElementById('field-ot-monthly-cap').value) === 0 ? 0 : (parseFloat(document.getElementById('field-ot-monthly-cap').value) || 160),
         ot_rate_type: document.getElementById('field-ot-rate-type').value,
         ot_simple_value: parseFloat(document.getElementById('field-ot-simple-val').value) || 1.5,
-        ot_qual_value: parseFloat(document.getElementById('field-ot-qual-val').value) || 2.0,
+        ot_qual_value: parseFloat(document.getElementById('field-ot-qual-val').value) === 0 ? 0 : (parseFloat(document.getElementById('field-ot-qual-val').value) || 2.0),
 
         notes: document.getElementById('field-notes').value.trim()
       };
