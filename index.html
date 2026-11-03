@@ -561,10 +561,13 @@
 
     <div class="header" style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
       <h2 style="margin: 0;">Rapporterade pass</h2>
-      <div style="min-width: 180px;">
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
         <select id="view-mode-select" onchange="renderTimeEntries()" style="padding: 6px 10px; font-size: 14px; background: #fff; border-radius: 6px; border: 1px solid var(--border);">
           <option value="running">Visning: Löpande (alla)</option>
           <option value="monthly">Visning: Per månad</option>
+        </select>
+        <select id="filter-customer-select" onchange="renderTimeEntries()" style="padding: 6px 10px; font-size: 14px; background: #fff; border-radius: 6px; border: 1px solid var(--border);">
+          <option value="all">Alla kunder</option>
         </select>
       </div>
     </div>
@@ -1470,7 +1473,7 @@
 
     async function triggerManualSync() {
       const backupObj = {
-        version: "5.17",
+        version: "5.18",
         profileId: activeProfileId,
         exportDate: new Date().toISOString(),
         customers: getCustomers(),
@@ -1483,7 +1486,7 @@
 
     async function selectAndroidBackupFolder() {
       const backupObj = {
-        version: "5.17",
+        version: "5.18",
         profileId: activeProfileId,
         exportDate: new Date().toISOString(),
         customers: getCustomers(),
@@ -2182,7 +2185,7 @@
 
     function buildBackupObject() {
       return {
-        version: "5.17",
+        version: "5.18",
         profileId: activeProfileId,
         exportDate: new Date().toISOString(),
         customers: getCustomers(),
@@ -2418,16 +2421,25 @@
       const liveSel = document.getElementById('live-customer');
       const timeSel = document.getElementById('time-customer');
       const exportSel = document.getElementById('export-customer-select');
+      const filterSel = document.getElementById('filter-customer-select');
+
+      const currentFilterVal = filterSel ? filterSel.value : 'all';
 
       liveSel.innerHTML = '<option value="">Välj kund för stämpling...</option>';
       timeSel.innerHTML = '<option value="">Välj kund...</option>';
       exportSel.innerHTML = '<option value="all">Alla kunder</option>';
+      if (filterSel) filterSel.innerHTML = '<option value="all">Alla kunder</option>';
 
       customers.forEach(c => {
         liveSel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
         timeSel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
         exportSel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+        if (filterSel) filterSel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
       });
+
+      if (filterSel) {
+        filterSel.value = currentFilterVal;
+      }
     }
 
     async function startShift() {
@@ -2877,6 +2889,7 @@
       const listContainer = document.getElementById('time-list');
       const overviewContainer = document.getElementById('monthly-overview');
       const viewMode = document.getElementById('view-mode-select').value;
+      const filterCustId = document.getElementById('filter-customer-select').value;
       const monthFilterContainer = document.getElementById('month-filter-container');
       const monthSelect = document.getElementById('select-month-filter');
 
@@ -2913,15 +2926,19 @@
         monthFilterContainer.style.display = 'none';
       }
 
-      // Filtrera baserat på visningsläge
+      // Filtrera baserat på visningsläge, månad och kund
       let activeEntries = entries;
       if (viewMode === 'monthly' && monthSelect.value) {
         const selectedYM = monthSelect.value;
-        activeEntries = entries.filter(e => e.date && e.date.startsWith(selectedYM));
+        activeEntries = activeEntries.filter(e => e.date && e.date.startsWith(selectedYM));
+      }
+
+      if (filterCustId !== 'all') {
+        activeEntries = activeEntries.filter(e => e.customerId === filterCustId);
       }
 
       if (activeEntries.length === 0) {
-        listContainer.innerHTML = '<div class="card" style="text-align:center; color: var(--text-muted);">Inga pass hittades för vald månad.</div>';
+        listContainer.innerHTML = '<div class="card" style="text-align:center; color: var(--text-muted);">Inga pass hittades för vald filtrering.</div>';
         return;
       }
 
@@ -2976,8 +2993,13 @@
       summaryCard.style.background = '#1e293b';
       summaryCard.style.color = '#fff';
       summaryCard.style.marginTop = '16px';
+      
+      const selectedCustObj = customers.find(c => c.id === filterCustId);
+      const custLabel = selectedCustObj ? selectedCustObj.name : 'Alla kunder';
+      const timeLabel = viewMode === 'monthly' ? monthSelect.value : 'Alla pass';
+
       summaryCard.innerHTML = `
-        <h3 style="margin:0 0 8px 0; font-size:16px; color:#38bdf8;">📊 Sammanställning (${viewMode === 'monthly' ? monthSelect.value : 'Alla pass'})</h3>
+        <h3 style="margin:0 0 8px 0; font-size:16px; color:#38bdf8;">📊 Sammanställning (${timeLabel} • ${custLabel})</h3>
         <div style="display:flex; justify-content:space-between; font-size:15px; margin-top:6px;">
           <span>Total arbetstid: <strong>${Number(grandTotalHours.toFixed(2))} h</strong></span>
           <span>Totalsumma: <strong>${Math.round(grandTotalCost).toLocaleString('sv-SE')} kr</strong></span>
@@ -3278,7 +3300,7 @@
     }
 
     async function exportData() {
-      const backupObj = { version: "5.17", profileId: activeProfileId, customers: getCustomers(), entries: getTimeEntries(), client: getClientInfo(), schedule: getScheduleInfo() };
+      const backupObj = { version: "5.18", profileId: activeProfileId, customers: getCustomers(), entries: getTimeEntries(), client: getClientInfo(), schedule: getScheduleInfo() };
       await saveOrShareFile(JSON.stringify(backupObj, null, 2), `backup_${activeProfileId}.json`, 'application/json');
     }
 
