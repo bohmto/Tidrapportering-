@@ -484,6 +484,11 @@
         </div>
 
         <div class="form-group">
+          <label for="time-project">Projekt</label>
+          <input type="text" id="time-project" placeholder="t.ex. Chaufför Ica">
+        </div>
+
+        <div class="form-group">
           <label for="time-date">Datum *</label>
           <input type="date" id="time-date" required>
         </div>
@@ -516,8 +521,8 @@
         </div>
 
         <div class="form-group">
-          <label for="time-desc">Beskrivning / Moment</label>
-          <input type="text" id="time-desc" placeholder="t.ex. Konsultation, arbetspass...">
+          <label for="time-desc">Beskrivning / Moment / Ordernummer</label>
+          <input type="text" id="time-desc" placeholder="t.ex. 80131 linken gick inte att flytta...">
         </div>
 
         <div style="display: flex; gap: 8px;">
@@ -659,7 +664,7 @@
       <form id="client-info-form" onsubmit="saveClientInfo(event)">
         <div class="form-group">
           <label for="client-name">Användarens Namn</label>
-          <input type="text" id="client-name" placeholder="t.ex. Anna Svensson">
+          <input type="text" id="client-name" placeholder="t.ex. T Nyström Böhm">
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -811,7 +816,7 @@
 
       <div class="form-group" style="margin-top: 12px;">
         <label for="modal-sched-note">Anteckning / Kund / Uppdrag</label>
-        <textarea id="modal-sched-note" rows="2" placeholder="t.ex. Acme AB - Servicearbete..."></textarea>
+        <textarea id="modal-sched-note" rows="2" placeholder="t.ex. Ica Hem till Dig - Servicearbete..."></textarea>
       </div>
 
       <div class="modal-actions" style="justify-content: space-between;">
@@ -836,12 +841,12 @@
 
       <div class="form-group">
         <label for="field-name">Kundnamn *</label>
-        <input type="text" id="field-name" placeholder="t.ex. Acme AB" required>
+        <input type="text" id="field-name" placeholder="t.ex. Ica Hem till Dig" required>
       </div>
 
       <div class="form-group">
         <label for="field-rate">Ordinarie timpris (kr/h) *</label>
-        <input type="number" id="field-rate" step="any" min="0" placeholder="850" required>
+        <input type="number" id="field-rate" step="any" min="0" placeholder="481" required>
       </div>
 
       <div class="form-group" style="display: flex; justify-content: space-between; align-items: center; background: #e2e8f0; padding: 12px; border-radius: 8px; margin-bottom: 8px;">
@@ -1031,7 +1036,7 @@
         "• Förkortad Veckovila (24h–45h):\n" +
         "   Om du tar mindre än 45 timmars helgvila måste den förlorade tiden kompenseras med sammanhängande vila innan slutet av den 3:e veckan.\n\n" +
         "• Vägarbetstidslagen (Max 60h/vecko-tak):\n" +
-        "   Arbetstiden får inte överstiga 60 timmar under en enskild vecka."
+        "   Arbetstiden får inte överstiga 60 timmar under en enskild vecko-tak."
       );
     }
 
@@ -1050,8 +1055,8 @@
     const DEFAULT_CUSTOMERS = [
       {
         id: 'k_1',
-        name: 'Acme AB',
-        hourly_rate: 850,
+        name: 'Ica Hem till Dig',
+        hourly_rate: 481,
         night_work_exempt: false,
         ob_enabled: true,
         ob_start_time: '18:00',
@@ -1069,17 +1074,7 @@
         ot_rate_type: 'multiplier',
         ot_simple_value: 1.5,
         ot_qual_value: 2.0,
-        notes: 'Vardag OB 1.5x (18-06), Helg OB 2.0x hela dygnet, Månadstak 160h'
-      },
-      {
-        id: 'k_2',
-        name: 'Konsultbolaget AB',
-        hourly_rate: 950,
-        night_work_exempt: true,
-        ob_enabled: false,
-        ot_enabled: false,
-        ot_monthly_cap: 160,
-        notes: 'Undantag nattarbete 10h (Kollektivavtal)'
+        notes: 'Chaufför Ica - Standardavtal'
       }
     ];
 
@@ -1201,7 +1196,7 @@
       const stored = localStorage.getItem('app_user_profiles_list');
       if (stored) return JSON.parse(stored);
       return [
-        { id: 'default_user', name: 'Standardanvändare' }
+        { id: 'default_user', name: 'T Nyström Böhm' }
       ];
     }
 
@@ -1272,6 +1267,10 @@
             start: "12:00",
             end: addMinutesToTime("12:00", entry.breakMin)
           }];
+          updated = true;
+        }
+        if (!entry.project) {
+          entry.project = "Chaufför Ica";
           updated = true;
         }
       });
@@ -1457,7 +1456,7 @@
 
     async function triggerManualSync() {
       const backupObj = {
-        version: "5.12",
+        version: "5.14",
         profileId: activeProfileId,
         exportDate: new Date().toISOString(),
         customers: getCustomers(),
@@ -1470,7 +1469,7 @@
 
     async function selectAndroidBackupFolder() {
       const backupObj = {
-        version: "5.12",
+        version: "5.14",
         profileId: activeProfileId,
         exportDate: new Date().toISOString(),
         customers: getCustomers(),
@@ -1518,7 +1517,7 @@
 
     function getClientInfo() {
       const stored = localStorage.getItem(getStorageKey('app_client_info_v5'));
-      return stored ? JSON.parse(stored) : { name: '', email: '', phone: '', address: '' };
+      return stored ? JSON.parse(stored) : { name: 'T Nyström Böhm', email: '', phone: '', address: '' };
     }
 
     function saveClientInfo(e) {
@@ -2169,7 +2168,7 @@
 
     function buildBackupObject() {
       return {
-        version: "5.12",
+        version: "5.14",
         profileId: activeProfileId,
         exportDate: new Date().toISOString(),
         customers: getCustomers(),
@@ -2348,79 +2347,56 @@
     }
 
     async function saveOrShareFile(content, filename, mimeType) {
-      const isNative = window.Capacitor && window.Capacitor.isNativePlatform();
-
-      if (isNative) {
-        try {
-          const { Filesystem, Directory, Encoding } = window.Capacitor.Plugins.Filesystem;
-          const { Share } = window.Capacitor.Plugins;
-
-          let writeData = content;
-          let isBase64 = false;
-
-          if (content instanceof ArrayBuffer || ArrayBuffer.isView(content)) {
-            const bytes = new Uint8Array(content);
-            let binary = '';
-            for (let i = 0; i < bytes.byteLength; i++) {
-              binary += String.fromCharCode(bytes[i]);
-            }
-            writeData = btoa(binary);
-            isBase64 = true;
+      try {
+        let base64Data = '';
+        if (content instanceof ArrayBuffer || ArrayBuffer.isView(content)) {
+          const bytes = new Uint8Array(content);
+          let binary = '';
+          for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
           }
+          base64Data = btoa(binary);
+        } else if (typeof content === 'string') {
+          const bytes = new TextEncoder().encode(content);
+          let binary = '';
+          for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          base64Data = btoa(binary);
+        }
 
-          const savedFile = await Filesystem.writeFile({
+        const capacitor = window.Capacitor;
+        const filesystem = capacitor?.Plugins?.Filesystem;
+        const share = capacitor?.Plugins?.Share;
+
+        if (capacitor && capacitor.isNativePlatform() && filesystem && share) {
+          const savedFile = await filesystem.writeFile({
             path: filename,
-            data: writeData,
-            directory: Directory.Cache,
-            ...(isBase64 ? {} : { encoding: Encoding.UTF8 })
+            data: base64Data,
+            directory: 'CACHE'
           });
 
-          await Share.share({
+          await share.share({
             title: filename,
-            text: 'Här är din exportfil från Tidsrapportering',
+            text: 'Här är din fil från Tidsrapportering',
             url: savedFile.uri,
             dialogTitle: 'Spara eller dela fil'
           });
           return;
-        } catch (err) {
-          console.warn('Capacitor native save/share misslyckades, fallar tillbaka:', err);
         }
-      }
 
-      const file = new File([content], filename, { type: mimeType });
-      if ('showSaveFilePicker' in window) {
-        try {
-          const ext = '.' + filename.split('.').pop();
-          const handle = await window.showSaveFilePicker({
-            suggestedName: filename,
-            types: [{ description: 'Exportfil', accept: { [mimeType]: [ext] } }]
-          });
-          const writable = await handle.createWritable();
-          await writable.write(content);
-          await writable.close();
-          return;
-        } catch (err) {
-          if (err.name === 'AbortError') return;
-        }
-      }
+        const dataUri = `data:${mimeType};base64,${base64Data}`;
+        const a = document.createElement('a');
+        a.href = dataUri;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: filename });
-          return;
-        } catch (err) {
-          if (err.name === 'AbortError') return;
-        }
+      } catch (err) {
+        console.error('Fel i saveOrShareFile:', err);
+        alert('Kunde inte spara filen: ' + err.message);
       }
-
-      const url = URL.createObjectURL(file);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
     }
 
     function populateCustomerDropdowns() {
@@ -2455,6 +2431,7 @@
       const shift = {
         customerId,
         startTime: Date.now(),
+        lastPeriodStart: Date.now(), // Håll koll på start för aktiv period (nollställs efter rast)
         breakTimeMs: 0,
         breakStart: null,
         breaks: [],
@@ -2478,6 +2455,11 @@
         const breakEnd = Date.now();
         const breakDurationMs = breakEnd - shift.breakStart;
         shift.breakTimeMs += breakDurationMs;
+
+        // NOLLSTÄLLNING AV RÄKNARE EFTER RAST:
+        // Vi sätter lastPeriodStart till nu för att påbörja en ny period/räknare efter avslutad rast
+        shift.lastPeriodStart = Date.now();
+        alarmStateMap = {}; // Nollställ larm så nya periodens varningar triggas korrekt
 
         if (!shift.breaks) shift.breaks = [];
         shift.breaks.push({
@@ -2525,6 +2507,7 @@
       const newEntry = {
         id: 'entry_' + Date.now(),
         customerId: shift.customerId,
+        project: 'Chaufför Ica',
         date: dateStr,
         startTime: startTimeStr,
         endTime: endTimeStr,
@@ -2542,7 +2525,6 @@
       alert(`Passet avslutat och sparat! (${workedHours} h arbetad tid)`);
     }
 
-    // --- WAKE LOCK & WEB AUDIO API (BAKGRUNDSKÖRNING) ---
     let wakeLock = null;
     let audioContext = null;
     let silentAudioInterval = null;
@@ -2615,7 +2597,6 @@
       }
     });
 
-    // --- UPPDATERAD DYNAMISK TIDTAGNING OCH VÄGARBETSTIDS-NOTISER ---
     function updateTimerUI() {
       const shift = getActiveShift();
       const badge = document.getElementById('timer-badge');
@@ -2690,10 +2671,16 @@
         clock.innerText = clockText;
 
         const startTimeStr = new Date(currentShift.startTime).toTimeString().slice(0, 5);
-        const latestFirstBreakTime = new Date(currentShift.startTime + 6 * 3600 * 1000);
-        const firstBreakStr = latestFirstBreakTime.toTimeString().slice(0, 5);
+        
+        // Beräkna tid i nuvarande period (nollställs efter varje avslutad rast)
+        const periodStart = currentShift.lastPeriodStart || currentShift.startTime;
+        const periodWorkedMs = Date.now() - periodStart - (currentShift.status === 'break' ? (Date.now() - currentShift.breakStart) : 0);
+        const periodWorkedHours = Math.max(0, periodWorkedMs) / (1000 * 60 * 60);
 
-        // --- BEVAKNING AV VÄGARBETSTID & PUSH-NOTISER ---
+        // Tid kvar till nästa rast i nuvarande period (ex. 4 eller 6 timmar)
+        const latestNextBreakTime = new Date(periodStart + 4 * 3600 * 1000);
+        const firstBreakStr = latestNextBreakTime.toTimeString().slice(0, 5);
+
         const enableRules = document.getElementById('enable-transport-rules')?.checked;
         if (enableRules) {
           complianceBox.style.display = 'block';
@@ -2701,28 +2688,22 @@
           const workedHours = currentWorkedMs / (1000 * 60 * 60);
           const totalBreakMins = Math.round((currentShift.breakTimeMs + (currentShift.status === 'break' ? (Date.now() - currentShift.breakStart) : 0)) / (1000 * 60));
 
-          // 🚛 PUSH-NOTISER ENLIGT VÄGARBETSTIDSLAGEN & FÄRDSKRIVARE
           if (currentShift.status === 'working') {
-            // Punkt 1: Varning vid 4 timmar
-            if (workedHours >= 4.0 && workedHours < 4.1 && !alarmStateMap['notified_4h']) {
+            if (periodWorkedHours >= 4.0 && periodWorkedHours < 4.1 && !alarmStateMap['notified_4h']) {
               alarmStateMap['notified_4h'] = true;
-              showNotification("⚠️ Rastvarning (Färdskrivare)", "Du har arbetat i 4 timmar. Planera in rast inom kort.");
+              showNotification("⚠️ Rastvarning (Ny period)", "Du har arbetat 4 timmar sedan senaste rasten. Planera in rast inom kort.");
             }
-            // Punkt 2: Varning vid 5,5 timmar (Innan 6-timmarsgränsen)
-            if (workedHours >= 5.5 && workedHours < 5.6 && !alarmStateMap['notified_5.5h']) {
+            if (periodWorkedHours >= 5.5 && periodWorkedHours < 5.6 && !alarmStateMap['notified_5.5h']) {
               alarmStateMap['notified_5.5h'] = true;
-              showNotification("🚨 VIKTIGT: Vägarbetstidslagen", "Sista chansen att ta rast – mindre än 30 minuter kvar till 6-timmarsgränsen!");
+              showNotification("🚨 VIKTIGT: Vägarbetstidslagen", "Sista chansen att ta rast – mindre än 30 minuter kvar till 6-timmarsgränsen för denna period!");
             }
           }
 
           let nextBreakInfo = '';
-          if (totalBreakMins < 30) {
-            const remainingForFirst = 30 - totalBreakMins;
-            nextBreakInfo = `<strong>1:a rast:</strong> Senast kl <strong>${firstBreakStr}</strong> (Krav: 30 min, varav <strong>${remainingForFirst} min</strong> kvar).`;
-          } else if (totalBreakMins < 45) {
-            nextBreakInfo = `✅ 30 min avklarat.<br><strong>2:a rast (15 min till):</strong> Tas senast vid 9h arbete (totalt 45 min).`;
+          if (periodWorkedHours < 4.0) {
+            nextBreakInfo = `<strong>Nästa rast (Period):</strong> Senast kl <strong>${firstBreakStr}</strong> (ca ${(4 - periodWorkedHours).toFixed(1)}h kvar till 4h-gräns).`;
           } else {
-            nextBreakInfo = `✅ Fullständiga raster avklarade (totalt <strong>${totalBreakMins} min</strong> registrerade).`;
+            nextBreakInfo = `⚠️ Du har passerat 4 timmar i denna period utan rast! Ta rast snarast (max 6h).`;
           }
 
           let shiftLimitWarning = '';
@@ -2734,12 +2715,12 @@
             shiftLimitWarning = `<div style="background: #b45309; color: #fff; padding: 8px; border-radius: 6px; margin-top: 6px; font-weight: bold; font-size: 13px;">
               ⚠️ VARNING: Passet har pågått i över 12 timmar. Kontrollera gällande dispens eller kollektivavtal för max passlängd.
             </div>`;
-          } else if (workedHours >= 5.75 && totalBreakMins < 30) {
-            shiftLimitWarning = `<div style="color: #ef4444; font-weight: bold; margin-top: 4px;">⚠️ Varning: 6 timmars gräns utan rast närmar sig!</div>`;
+          } else if (periodWorkedHours >= 5.75) {
+            shiftLimitWarning = `<div style="color: #ef4444; font-weight: bold; margin-top: 4px;">⚠️ Varning: 6 timmars gräns i denna period närmar sig!</div>`;
           }
 
           complianceBox.innerHTML = `
-            <div style="font-size: 12px; color: #cbd5e1; font-weight: 600; margin-bottom: 4px;">🚛 Vägarbetstid & Passbevakning (${workedHours.toFixed(1)}h arbetat):</div>
+            <div style="font-size: 12px; color: #cbd5e1; font-weight: 600; margin-bottom: 4px;">🚛 Vägarbetstid & Periodbevakning (Total tid: ${workedHours.toFixed(1)}h):</div>
             <div style="font-size: 13px; color: #fff; line-height: 1.4;">${nextBreakInfo}</div>
             ${shiftLimitWarning}
           `;
@@ -2748,10 +2729,10 @@
         }
 
         if (currentShift.status === 'working') {
-          subtext.innerText = `Startat kl ${startTimeStr} | 1:a rast senast kl ${firstBreakStr}`;
-          topStatusText.innerText = `⏱️ ARBETAR: ${custName} (${clockText}) • 1:a rast senast ${firstBreakStr}`;
+          subtext.innerText = `Startat kl ${startTimeStr} | Nästa rast senast kl ${firstBreakStr}`;
+          topStatusText.innerText = `⏱️ ARBETAR: ${custName} (${clockText}) • Nästa rast senast ${firstBreakStr}`;
           updateAppStatusIndicators(currentShift, clockText);
-          updateBackgroundNotification(`⏱️ Arbetar på ${custName}`, `Startade kl ${startTimeStr} | 1:a rast senast kl ${firstBreakStr}`, true, false, currentShift.startTime);
+          updateBackgroundNotification(`⏱️ Arbetar på ${custName}`, `Startade kl ${startTimeStr} | Nästa rast senast kl ${firstBreakStr}`, true, false, currentShift.startTime);
         } else if (currentShift.status === 'break') {
           const elapsedBreakMs = Date.now() - currentShift.breakStart;
           const bSec = Math.floor((elapsedBreakMs / 1000) % 60);
@@ -2776,7 +2757,7 @@
       const breakMin = parseInt(document.getElementById('time-break').value, 10) || 0;
 
       if (startTime && endTime) {
-        const dateStr = document.getElementById('time-date').value || '2026-01-01';
+        const dateStr = document.getElementById('time-date').value || '2026-09-01';
         const start = new Date(`${dateStr}T${startTime}`);
         let end = new Date(`${dateStr}T${endTime}`);
         if (end < start) end.setDate(end.getDate() + 1);
@@ -2793,6 +2774,7 @@
       document.getElementById('break-rows-container').innerHTML = '';
       document.getElementById('total-break-display').innerText = '0';
       document.getElementById('time-date').valueAsDate = new Date();
+      document.getElementById('time-project').value = 'Chaufför Ica';
       document.getElementById('time-break').value = "0";
       document.getElementById('form-title').innerText = 'Spara pass';
       document.getElementById('btn-save-entry').innerText = 'Spara tidssegment';
@@ -2803,6 +2785,7 @@
       e.preventDefault();
       const editId = document.getElementById('entry-edit-id').value;
       const customerId = document.getElementById('time-customer').value;
+      const project = document.getElementById('time-project').value.trim() || 'Chaufför Ica';
       const date = document.getElementById('time-date').value;
       const startTime = document.getElementById('time-start').value || '';
       const endTime = document.getElementById('time-end').value || '';
@@ -2816,11 +2799,11 @@
       if (editId) {
         const idx = entries.findIndex(e => e.id === editId);
         if (idx >= 0) {
-          entries[idx] = { id: editId, customerId, date, startTime, endTime, hours, breakMin, breaks, desc };
+          entries[idx] = { id: editId, customerId, project, date, startTime, endTime, hours, breakMin, breaks, desc };
           entryObj = entries[idx];
         }
       } else {
-        entryObj = { id: 'entry_' + Date.now(), customerId, date, startTime, endTime, hours, breakMin, breaks, desc };
+        entryObj = { id: 'entry_' + Date.now(), customerId, project, date, startTime, endTime, hours, breakMin, breaks, desc };
         entries.unshift(entryObj);
       }
 
@@ -2832,103 +2815,18 @@
     });
 
     function calculateEntryCost(entry, customer) {
-      if (!customer || !entry) return { totalHours: 0, cost: 0, regularHours: 0, regularCost: 0, obHours: 0, obCost: 0, breakMin: 0, obTypeLabel: '' };
+      if (!customer || !entry) return { totalHours: 0, cost: 0, rate: 0, breakMin: 0 };
 
       const breakMin = parseInt(entry.breakMin, 10) || 0;
       let totalHours = safeNum(entry.hours);
-      const rate = safeNum(customer.hourly_rate);
-
-      if (totalHours <= 0) {
-        return { totalHours: 0, cost: 0, regularHours: 0, regularCost: 0, obHours: 0, obCost: 0, breakMin, obTypeLabel: '' };
-      }
-
-      let obHours = 0;
-      let obTypeLabel = '';
-
-      if (customer.ob_enabled && entry.startTime && entry.endTime) {
-        const dateStr = entry.date || '2026-01-01';
-        const start = new Date(`${dateStr}T${entry.startTime}`);
-        let end = new Date(`${dateStr}T${entry.endTime}`);
-        if (end < start) end.setDate(end.getDate() + 1);
-
-        const dayOfWeek = start.getDay();
-        const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
-
-        if (isWeekend && customer.ob_weekend_enabled) {
-          obHours = totalHours;
-          obTypeLabel = 'Helg-OB';
-        } else if (!isWeekend) {
-          const [obStartH, obStartM] = (customer.ob_start_time || '18:00').split(':').map(Number);
-          const [obEndH, obEndM] = (customer.ob_end_time || '06:00').split(':').map(Number);
-          
-          let curr = new Date(start);
-          let obMinsCount = 0;
-
-          while (curr < end) {
-            let nextMin = new Date(curr.getTime() + 60000);
-            if (nextMin > end) nextMin = new Date(end);
-
-            const h = curr.getHours();
-            const m = curr.getMinutes();
-            const timeVal = h * 60 + m;
-
-            const startObVal = obStartH * 60 + obStartM;
-            const endObVal = obEndH * 60 + obEndM;
-
-            let isObActive = false;
-            if (startObVal > endObVal) {
-              if (timeVal >= startObVal || timeVal < endObVal) {
-                isObActive = true;
-              }
-            } else {
-              if (timeVal >= startObVal && timeVal < endObVal) {
-                isObActive = true;
-              }
-            }
-
-            if (isObActive) obMinsCount++;
-            curr = nextMin;
-          }
-
-          if (obMinsCount > 0) {
-            obHours = Number((obMinsCount / 60).toFixed(2));
-            obTypeLabel = 'Vardags-OB';
-          }
-        }
-      }
-
-      let regularHours = Math.max(0, Number((totalHours - obHours).toFixed(2)));
-      let regularCost = regularHours * rate;
-      let obCost = 0;
-
-      if (obHours > 0) {
-        const isWeekend = ((new Date(`${entry.date || '2026-01-01'}T${entry.startTime}`).getDay() % 6) === 0);
-        let rateType = customer.ob_rate_type;
-        let rateVal = safeNum(customer.ob_rate_value, 1.5);
-
-        if (isWeekend && customer.ob_weekend_enabled) {
-          rateType = customer.ob_weekend_rate_type;
-          rateVal = safeNum(customer.ob_weekend_rate_value, 2.0);
-        }
-
-        if (rateType === 'multiplier') {
-          obCost = obHours * rate * rateVal;
-        } else {
-          obCost = obHours * (rate + rateVal);
-        }
-      }
-
-      let totalCost = Math.round(regularCost + obCost);
+      let rate = safeNum(customer.hourly_rate);
+      let cost = totalHours * rate;
 
       return {
         totalHours: safeNum(totalHours.toFixed(2)),
-        regularHours,
-        regularCost: Math.round(regularCost),
-        obHours: safeNum(obHours.toFixed(2)),
-        obCost: Math.round(obCost),
-        cost: totalCost,
-        breakMin,
-        obTypeLabel
+        rate: rate,
+        cost: Math.round(safeNum(cost) * 100) / 100,
+        breakMin: breakMin
       };
     }
 
@@ -2937,6 +2835,7 @@
       if (!entry) return;
       document.getElementById('entry-edit-id').value = entry.id;
       document.getElementById('time-customer').value = entry.customerId;
+      document.getElementById('time-project').value = entry.project || 'Chaufför Ica';
       document.getElementById('time-date').value = entry.date;
       document.getElementById('time-start').value = entry.startTime || '';
       document.getElementById('time-end').value = entry.endTime || '';
@@ -2997,17 +2896,12 @@
           breaksText = `<div style="font-size:12px; color:var(--text-muted); margin-top:4px;">☕ Rast: ${calc.breakMin} min</div>`;
         }
 
-        let obDisplay = '';
-        if (calc.obCost > 0) {
-          obDisplay = `<span style="color:var(--warning); font-size:13px;">(OB: ${calc.obHours} h, +${calc.obCost.toLocaleString('sv-SE')} kr)</span>`;
-        }
-
         const card = document.createElement('div');
         card.className = 'card';
         card.innerHTML = `
           <div style="display:flex; justify-content:space-between; align-items:flex-start;">
             <div>
-              <strong style="font-size:16px;">${cust ? cust.name : 'Okänd kund'}</strong>
+              <strong style="font-size:16px;">${cust ? cust.name : 'Okänd kund'} (${entry.project || 'Chaufför'})</strong>
               <div style="font-size:13px; color:var(--text-muted);">${entry.date || ''} ${entry.startTime ? `(${entry.startTime}–${entry.endTime})` : ''}</div>
             </div>
             <div>
@@ -3016,8 +2910,9 @@
             </div>
           </div>
           <div style="margin-top:10px; font-size:14px;">
-            <span>⏱️ Tid: <strong>${calc.totalHours} h</strong> (Ordinarie: ${calc.regularHours}h, OB: ${calc.obHours}h)</span> | 
-            <span>💰 Summa: <strong>${calc.cost.toLocaleString('sv-SE')} kr</strong> ${obDisplay}</span>
+            <span>⏱️ Tid: <strong>${calc.totalHours} h</strong></span> | 
+            <span>💰 Taxa: <strong>${calc.rate} kr/h</strong></span> | 
+            <span>Ersättning: <strong>${calc.cost.toLocaleString('sv-SE')} kr</strong></span>
           </div>
           ${breaksText}
           ${entry.desc ? `<div style="font-size:13px; color:var(--text-muted); margin-top:6px;">📝 ${entry.desc}</div>` : ''}
@@ -3060,77 +2955,125 @@
       });
     }
 
-    function buildMonthlySummaryMap(filteredEntries) {
-      const customers = getCustomers();
-      const summaryMap = {};
-
-      filteredEntries.forEach(e => {
-        const cust = customers.find(c => c.id === e.customerId);
-        const custName = cust ? cust.name : 'Okänd';
-        
-        if (!summaryMap[custName]) {
-          summaryMap[custName] = { 
-            customer: cust,
-            totalHours: 0, 
-            obHours: 0,
-            weekdayObHours: 0, 
-            weekdayObCost: 0, 
-            weekendObHours: 0, 
-            weekendObCost: 0, 
-            rawCost: 0 
-          };
-        }
-
-        const calc = calculateEntryCost(e, cust);
-        summaryMap[custName].totalHours += calc.totalHours;
-
-        if (calc.obCost > 0 || calc.obHours > 0) {
-          summaryMap[custName].obHours += calc.obHours;
-          if (calc.obTypeLabel === 'Helg-OB') {
-            summaryMap[custName].weekendObHours += calc.obHours;
-            summaryMap[custName].weekendObCost += calc.obCost;
-          } else {
-            summaryMap[custName].weekdayObHours += calc.obHours;
-            summaryMap[custName].weekdayObCost += calc.obCost;
-          }
-        }
-        summaryMap[custName].rawCost += calc.cost;
-      });
-
-      Object.keys(summaryMap).forEach(name => {
-        const item = summaryMap[name];
-        const cust = item.customer;
-        
-        item.regularHours = item.totalHours;
-        item.otHours = 0;
-        item.otAddonCost = 0;
-        item.finalTotalCost = item.rawCost;
-
-        if (cust && cust.ot_enabled) {
-          const cap = safeNum(cust.ot_monthly_cap, 160);
-          if (item.totalHours > cap) {
-            item.regularHours = cap;
-            item.otHours = Number((item.totalHours - cap).toFixed(2));
-
-            const rate = safeNum(cust.hourly_rate);
-            const otType = cust.ot_rate_type || 'multiplier';
-            const otVal = safeNum(cust.ot_simple_value, 1.5);
-
-            if (otType === 'multiplier') {
-              item.otAddonCost = Math.round(item.otHours * rate * (otVal - 1));
-            } else if (otType === 'addon') {
-              item.otAddonCost = Math.round(item.otHours * otVal);
-            } else if (otType === 'fixed_rate') {
-              item.otAddonCost = Math.round(item.otHours * (otVal - rate));
-            }
-            item.finalTotalCost = item.rawCost + item.otAddonCost;
-          }
-        }
-      });
-
-      return summaryMap;
+    // --- HJÄLPFUNKTIONER FÖR HELG & OB-SPLITTNING ---
+    function isWeekend(dateStr) {
+      if (!dateStr) return false;
+      const d = new Date(dateStr + 'T00:00:00');
+      const day = d.getDay();
+      return day === 0 || day === 6; // Söndag eller Lördag
     }
 
+    function calculateHoursBetween(startStr, endStr, breakMins = 0) {
+      if (!startStr || !endStr) return 0;
+      const [sh, sm] = startStr.split(':').map(Number);
+      const [eh, em] = endStr.split(':').map(Number);
+      let totalMins = (eh * 60 + em) - (sh * 60 + sm) - breakMins;
+      return Math.max(0, Number((totalMins / 60).toFixed(2)));
+    }
+
+    function splitEntryForReport(entry, customer) {
+      const rows = [];
+      const startTime = entry.startTime || "00:00";
+      const endTime = entry.endTime || "00:00";
+      const baseRate = customer ? safeNum(customer.hourly_rate) : 0;
+      const custName = customer ? customer.name : "Ica Hem till Dig";
+      const proj = entry.project || "Chaufför Ica";
+      const desc = entry.desc || "";
+      const isWk = isWeekend(entry.date);
+
+      // 1. HELG-OB
+      if (isWk && customer && customer.ob_enabled && customer.ob_weekend_enabled) {
+        let wkndRate = baseRate;
+        if (customer.ob_weekend_rate_type === 'multiplier') {
+          wkndRate = baseRate * (customer.ob_weekend_rate_value || 2.0);
+        } else {
+          wkndRate = baseRate + (customer.ob_weekend_rate_value || 0);
+        }
+
+        const totalHours = safeNum(entry.hours);
+        rows.push({
+          date: entry.date,
+          startTime: startTime,
+          endTime: endTime,
+          breakMin: entry.breakMin || 0,
+          hours: totalHours,
+          rate: wkndRate,
+          cost: Math.round(totalHours * wkndRate * 100) / 100,
+          project: proj + " (Helg-OB)",
+          customerName: custName,
+          desc: (desc ? desc + " - " : "") + "Helg-OB"
+        });
+        return rows;
+      }
+
+      // 2. VARDAGS-OB (SPLITT NÄR PASS PASSAR 18:00)
+      if (!isWk && startTime < "18:00" && endTime > "18:00") {
+        const hoursBefore18 = calculateHoursBetween(startTime, "18:00", entry.breakMin);
+        rows.push({
+          date: entry.date,
+          startTime: startTime,
+          endTime: "18:00",
+          breakMin: entry.breakMin || 0,
+          hours: hoursBefore18,
+          rate: baseRate,
+          cost: Math.round(hoursBefore18 * baseRate * 100) / 100,
+          project: proj,
+          customerName: custName,
+          desc: desc
+        });
+
+        const hoursAfter18 = calculateHoursBetween("18:00", endTime, 0);
+        let obRate = baseRate;
+        if (customer && customer.ob_enabled) {
+          obRate = customer.ob_rate_type === 'multiplier' 
+            ? baseRate * (customer.ob_rate_value || 1.5)
+            : baseRate + (customer.ob_rate_value || 0);
+        }
+
+        rows.push({
+          date: entry.date,
+          startTime: "18:00",
+          endTime: endTime,
+          breakMin: 0,
+          hours: hoursAfter18,
+          rate: obRate,
+          cost: Math.round(hoursAfter18 * obRate * 100) / 100,
+          project: proj + " (Vardags-OB)",
+          customerName: custName,
+          desc: (desc ? desc + " - " : "") + "OB-tid efter 18:00"
+        });
+      } else {
+        let effectiveRate = baseRate;
+        let projSuffix = "";
+        if (!isWk && startTime >= "18:00" && customer && customer.ob_enabled) {
+          effectiveRate = customer.ob_rate_type === 'multiplier'
+            ? baseRate * (customer.ob_rate_value || 1.5)
+            : baseRate + (customer.ob_rate_value || 0);
+          projSuffix = " (Vardags-OB)";
+        }
+
+        const calc = calculateEntryCost(entry, customer);
+        const totalH = calc.totalHours;
+        const totalCost = (effectiveRate !== baseRate) ? Math.round(totalH * effectiveRate * 100) / 100 : calc.cost;
+
+        rows.push({
+          date: entry.date,
+          startTime: startTime,
+          endTime: endTime,
+          breakMin: entry.breakMin || 0,
+          hours: totalH,
+          rate: effectiveRate,
+          cost: totalCost,
+          project: proj + projSuffix,
+          customerName: custName,
+          desc: desc
+        });
+      }
+
+      return rows;
+    }
+
+    // --- UPPDATERAD EXCEL-EXPORT (UTAN ICA I RUBRIK OCH UTAN PROJEKT/KUND PÅ RAST-ARK) ---
     async function exportExcel() {
       if (typeof XLSX === 'undefined') {
         alert("Excel-biblioteket kunde inte laddas.");
@@ -3140,84 +3083,140 @@
       const customers = getCustomers();
       if (filtered.length === 0) { alert('Inga pass att exportera.'); return; }
 
-      const sheetData = [
-        ["Datum", "Kund", "Starttid", "Sluttid", "Obetald rast (min)", "Ordinära timmar (h)", "OB-timmar (h)", "Timpris (kr)", "OB-typ", "OB-tillägg (kr)", "Beskrivning", "Totalt (kr)"]
+      const client = getClientInfo();
+      const clientName = client.name || 'T Nyström Böhm';
+
+      let minDate = filtered[filtered.length - 1].date;
+      let maxDate = filtered[0].date;
+
+      let totalHoursSum = 0;
+      let totalCostSum = 0;
+
+      // FLIK 2: TID
+      const tidSheetRows = [
+        [`Tidrapport ${clientName}`],
+        [],
+        ["Datum", "Tid in", "Tid ut", "Rast", "Timmar", "Taxa/tim", "Ersättning", "Projekt", "Kund", "Beskrivning"]
       ];
 
       filtered.forEach(e => {
         const cust = customers.find(c => c.id === e.customerId);
-        const calc = calculateEntryCost(e, cust);
-        sheetData.push([
-          e.date || '',
-          cust ? cust.name : 'Okänd',
-          e.startTime || '',
-          e.endTime || '',
-          calc.breakMin,
-          calc.regularHours,
-          calc.obHours,
-          cust ? cust.hourly_rate : 0,
-          calc.obTypeLabel || '-',
-          calc.obCost,
-          e.desc || '',
-          calc.cost
-        ]);
+        const splitRows = splitEntryForReport(e, cust);
+
+        splitRows.forEach(r => {
+          totalHoursSum += r.hours;
+          totalCostSum += r.cost;
+          const rastHours = Number((r.breakMin / 60).toFixed(2));
+
+          tidSheetRows.push([
+            r.date || '',
+            r.startTime || '',
+            r.endTime || '',
+            rastHours > 0 ? rastHours : '',
+            r.hours,
+            r.rate,
+            r.cost,
+            r.project,
+            r.customerName,
+            r.desc
+          ]);
+        });
       });
 
-      const summaryMap = buildMonthlySummaryMap(filtered);
+      tidSheetRows.push([
+        "Totalt", "", "", "", Number(totalHoursSum.toFixed(2)), "", Number(totalCostSum.toFixed(2)), "", "", ""
+      ]);
 
-      const summaryData = [
-        ["Kund", "Total tid (h)", "OB-tid (h)", "OB (kr)", "OB1 / Helg-OB (kr)", "Övertidstillägg (kr)", "Total summa (kr)"]
+      // FLIK 1: SAMMANFATTNING
+      const sammRows = [
+        [`Tidrapport - Sammanfattning`],
+        ["Användare:", clientName],
+        ["Tidsperiod:", `${minDate} till ${maxDate}`],
+        [],
+        ["Nyckeltal", "Värde"],
+        ["Total arbetstid", `${Number(totalHoursSum.toFixed(2))} h`],
+        ["Total ersättning", `${Number(totalCostSum.toFixed(2))} kr`]
       ];
-      Object.keys(summaryMap).forEach(name => {
-        const s = summaryMap[name];
-        summaryData.push([
-          name,
-          Number(s.totalHours.toFixed(2)),
-          Number(s.obHours.toFixed(2)),
-          Math.round(s.weekdayObCost),
-          Math.round(s.weekendObCost),
-          Math.round(s.otAddonCost),
-          Math.round(s.finalTotalCost)
-        ]);
+
+      // FLIK 3: RAST (Utan projekt och kund)
+      const rastSheetRows = [
+        ["Datum", "Start", "Slut", "Varaktighet (h)"]
+      ];
+
+      filtered.forEach(e => {
+        if (e.breaks && e.breaks.length > 0) {
+          e.breaks.forEach(b => {
+            if (b.start && b.end) {
+              const [sh, sm] = b.start.split(':').map(Number);
+              const [eh, em] = b.end.split(':').map(Number);
+              let diff = ((eh * 60 + em) - (sh * 60 + sm)) / 60;
+              if (diff < 0) diff += 24;
+              rastSheetRows.push([
+                e.date,
+                b.start,
+                b.end,
+                Number(diff.toFixed(2))
+              ]);
+            }
+          });
+        } else if (e.breakMin > 0) {
+          rastSheetRows.push([
+            e.date,
+            "-",
+            "-",
+            Number((e.breakMin / 60).toFixed(2))
+          ]);
+        }
       });
 
       const wb = XLSX.utils.book_new();
-      const ws1 = XLSX.utils.aoa_to_sheet(sheetData);
-      const ws2 = XLSX.utils.aoa_to_sheet(summaryData);
-      XLSX.utils.book_append_sheet(wb, ws1, "Tidsrapport");
-      XLSX.utils.book_append_sheet(wb, ws2, "Månadssammanställning");
+      const wsSamm = XLSX.utils.aoa_to_sheet(sammRows);
+      const wsTid = XLSX.utils.aoa_to_sheet(tidSheetRows);
+      const wsRast = XLSX.utils.aoa_to_sheet(rastSheetRows);
+
+      XLSX.utils.book_append_sheet(wb, wsSamm, "Sammanfattning");
+      XLSX.utils.book_append_sheet(wb, wsTid, "Tid");
+      XLSX.utils.book_append_sheet(wb, wsRast, "Rast");
 
       const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      await saveOrShareFile(excelBuffer, `tidsrapport_${activeProfileId}_${new Date().toISOString().slice(0,10)}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      await saveOrShareFile(excelBuffer, `Tidrapport_${clientName}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     }
 
+    // --- UPPDATERAD CSV EXPORT ---
     async function exportCSV() {
       const filtered = getFilteredEntriesForExport();
       const customers = getCustomers();
       if (filtered.length === 0) { alert('Inga pass att exportera.'); return; }
 
-      let csv = "Datum;Kund;Starttid;Sluttid;Obetald rast (min);Ordinära timmar (h);OB-timmar (h);Timpris (kr);OB-typ;OB-tillägg (kr);Beskrivning;Totalt (kr)\n";
+      const client = getClientInfo();
+      const clientName = client.name || 'T Nyström Böhm';
+
+      let csv = `Tidrapport ${clientName}\n\n`;
+      csv += "Datum;Tid in;Tid ut;Rast;Timmar;Taxa/tim;Ersättning;Projekt;Kund;Beskrivning\n";
+      
+      let totalHoursSum = 0;
+      let totalCostSum = 0;
+
       filtered.forEach(e => {
         const cust = customers.find(c => c.id === e.customerId);
-        const calc = calculateEntryCost(e, cust);
-        csv += `${e.date || ''};"${cust ? cust.name : 'Okänd'}";${e.startTime || ''};${e.endTime || ''};${calc.breakMin};${calc.regularHours};${calc.obHours};${cust ? cust.hourly_rate : 0};"${calc.obTypeLabel || ''}";${calc.obCost};"${e.desc || ''}";${calc.cost}\n`;
+        const splitRows = splitEntryForReport(e, cust);
+
+        splitRows.forEach(r => {
+          totalHoursSum += r.hours;
+          totalCostSum += r.cost;
+          const rastHours = Number((r.breakMin / 60).toFixed(2));
+
+          csv += `${r.date || ''};${r.startTime || ''};${r.endTime || ''};${rastHours > 0 ? rastHours : ''};${r.hours};${r.rate};${r.cost};"${r.project}";"${r.customerName}";"${r.desc}"\n`;
+        });
       });
 
-      csv += "\nMÅNADSSAMMANSTÄLLNING PER KUND\n";
-      csv += "Kund;Total tid (h);OB-tid (h);OB (kr);OB1 / Helg-OB (kr);Övertidstillägg (kr);Total summa (kr)\n";
+      csv += `Totalt;;;;${Number(totalHoursSum.toFixed(2))};;${Number(totalCostSum.toFixed(2))};;;\n`;
 
-      const summaryMap = buildMonthlySummaryMap(filtered);
-
-      Object.keys(summaryMap).forEach(name => {
-        const s = summaryMap[name];
-        csv += `"${name}";${Number(s.totalHours.toFixed(2))};${Number(s.obHours.toFixed(2))};${Math.round(s.weekdayObCost)};${Math.round(s.weekendObCost)};${Math.round(s.otAddonCost)};${Math.round(s.finalTotalCost)}\n`;
-      });
-
-      await saveOrShareFile(csv, `tidsrapport_${activeProfileId}_${new Date().toISOString().slice(0,10)}.csv`, 'text/csv;charset=utf-8;');
+      await saveOrShareFile(csv, `Tidrapport_${clientName}.csv`, 'text/csv;charset=utf-8;');
     }
 
     async function exportData() {
-      const backupObj = { version: "5.12", profileId: activeProfileId, customers: getCustomers(), entries: getTimeEntries(), client: getClientInfo(), schedule: getScheduleInfo() };
+      const backupObj = { version: "5.14", profileId: activeProfileId, customers: getCustomers(), entries: getTimeEntries(), client: getClientInfo(), schedule: getScheduleInfo() };
       await saveOrShareFile(JSON.stringify(backupObj, null, 2), `backup_${activeProfileId}.json`, 'application/json');
     }
 
@@ -3399,6 +3398,7 @@
       renderProfileDropdown();
       migrateOldEntries();
       document.getElementById('time-date').valueAsDate = new Date();
+      document.getElementById('time-project').value = 'Chaufför Ica';
       populateCustomerDropdowns();
       renderCustomerList();
       renderTimeEntries();
