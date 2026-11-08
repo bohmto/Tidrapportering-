@@ -671,8 +671,9 @@
           <label for="profile-select" style="font-size: 12px;">Aktiv användare</label>
           <select id="profile-select" onchange="switchUserProfile(this.value)" style="padding: 10px; font-size: 15px;"></select>
         </div>
-        <div style="display: flex; align-items: flex-end; padding-top: 20px;">
+        <div style="display: flex; align-items: flex-end; gap: 6px; padding-top: 20px;">
           <button type="button" class="btn btn-primary btn-sm" onclick="promptNewUserProfile()">+ Ny</button>
+          <button type="button" class="btn btn-danger btn-sm" onclick="deleteActiveUserProfile()">Ta bort aktiv</button>
         </div>
       </div>
     </div>
@@ -1264,6 +1265,36 @@
       loadClientInfoUI();
 
       alert(`Användare "${name.trim()}" skapad och aktiverad!`);
+    }
+
+    function deleteActiveUserProfile() {
+      let profiles = getAllProfiles();
+      if (profiles.length <= 1) {
+        alert("Du kan inte ta bort den sista kvarvarande profilen.");
+        return;
+      }
+
+      const activeProfile = profiles.find(p => p.id === activeProfileId);
+      const profileName = activeProfile ? activeProfile.name : activeProfileId;
+
+      if (!confirm(`Är du säker på att du vill ta bort profilen "${profileName}" och all tillhörande data permanent?`)) {
+        return;
+      }
+
+      // Rensa all lokal lagring kopplad till denna profil
+      localStorage.removeItem(getStorageKey('app_client_info_v5'));
+      localStorage.removeItem(getStorageKey('app_customers_v5'));
+      localStorage.removeItem(getStorageKey('app_time_entries_v5'));
+      localStorage.removeItem(getStorageKey('app_schedule_info_v5'));
+      localStorage.removeItem(getStorageKey('app_active_shift_v5'));
+
+      // Ta bort profilen från listan
+      profiles = profiles.filter(p => p.id !== activeProfileId);
+      saveAllProfiles(profiles);
+
+      // Välj den första tillgängliga profilen
+      switchUserProfile(profiles[0].id);
+      alert("Profilen har tagits bort.");
     }
 
     function addMinutesToTime(timeStr, mins) {
