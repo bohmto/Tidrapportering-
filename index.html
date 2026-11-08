@@ -1286,10 +1286,6 @@
           }];
           updated = true;
         }
-        if (!entry.project) {
-          entry.project = "Chaufför Ica";
-          updated = true;
-        }
       });
 
       if (updated) {
@@ -2365,7 +2361,6 @@
 
     async function saveOrShareFile(content, filename, mimeType) {
       try {
-        // 1. Använd File System Access API om det finns (Chrome/Edge/Desktop/Android Chrome)
         if (window.showSaveFilePicker && (!window.Capacitor || !window.Capacitor.isNativePlatform())) {
           try {
             const fileExtension = filename.split('.').pop();
@@ -2553,7 +2548,7 @@
       const newEntry = {
         id: 'entry_' + Date.now(),
         customerId: shift.customerId,
-        project: 'Chaufför Ica',
+        project: '',
         date: dateStr,
         startTime: startTimeStr,
         endTime: endTimeStr,
@@ -2818,7 +2813,7 @@
       document.getElementById('break-rows-container').innerHTML = '';
       document.getElementById('total-break-display').innerText = '0';
       document.getElementById('time-date').valueAsDate = new Date();
-      document.getElementById('time-project').value = 'Chaufför Ica';
+      document.getElementById('time-project').value = '';
       document.getElementById('time-break').value = "0";
       document.getElementById('form-title').innerText = 'Spara pass';
       document.getElementById('btn-save-entry').innerText = 'Spara tidssegment';
@@ -2829,7 +2824,7 @@
       e.preventDefault();
       const editId = document.getElementById('entry-edit-id').value;
       const customerId = document.getElementById('time-customer').value;
-      const project = document.getElementById('time-project').value.trim() || 'Chaufför Ica';
+      const project = document.getElementById('time-project').value.trim();
       const date = document.getElementById('time-date').value;
       const startTime = document.getElementById('time-start').value || '';
       const endTime = document.getElementById('time-end').value || '';
@@ -2879,7 +2874,7 @@
       if (!entry) return;
       document.getElementById('entry-edit-id').value = entry.id;
       document.getElementById('time-customer').value = entry.customerId;
-      document.getElementById('time-project').value = entry.project || 'Chaufför Ica';
+      document.getElementById('time-project').value = entry.project || '';
       document.getElementById('time-date').value = entry.date;
       document.getElementById('time-start').value = entry.startTime || '';
       document.getElementById('time-end').value = entry.endTime || '';
@@ -2989,7 +2984,7 @@
         card.innerHTML = `
           <div style="display:flex; justify-content:space-between; align-items:flex-start;">
             <div>
-              <strong style="font-size:16px;">${cust ? cust.name : 'Okänd kund'} (${entry.project || 'Chaufför'})</strong>
+              <strong style="font-size:16px;">${cust ? cust.name : 'Okänd kund'}${entry.project ? ' (' + entry.project + ')' : ''}</strong>
               <div style="font-size:13px; color:var(--text-muted);">${entry.date || ''} ${entry.startTime ? `(${entry.startTime}–${entry.endTime})` : ''}</div>
             </div>
             <div>
@@ -3078,7 +3073,7 @@
       const endTime = entry.endTime || "00:00";
       const baseRate = customer ? safeNum(customer.hourly_rate) : 0;
       const custName = customer ? customer.name : "Ica Hem till Dig";
-      const proj = entry.project || "Chaufför Ica";
+      const proj = entry.project || "";
       const desc = entry.desc || "";
       const isWk = isWeekend(entry.date);
 
@@ -3099,7 +3094,7 @@
           hours: totalHours,
           rate: wkndRate,
           cost: Math.round(totalHours * wkndRate * 100) / 100,
-          project: proj + " (Helg-OB)",
+          project: (proj ? proj + " " : "") + "(Helg-OB)",
           customerName: custName,
           desc: (desc ? desc + " - " : "") + "Helg-OB"
         });
@@ -3145,7 +3140,7 @@
             hours: hoursAfter18,
             rate: obRate,
             cost: Math.round(hoursAfter18 * obRate * 100) / 100,
-            project: proj + " (Vardags-OB)",
+            project: (proj ? proj + " " : "") + "(Vardags-OB)",
             customerName: custName,
             desc: (desc ? desc + " - " : "") + "OB-tid efter 18:00"
           });
@@ -3501,7 +3496,7 @@
       renderProfileDropdown();
       migrateOldEntries();
       document.getElementById('time-date').valueAsDate = new Date();
-      document.getElementById('time-project').value = 'Chaufför Ica';
+      document.getElementById('time-project').value = '';
       populateCustomerDropdowns();
       renderCustomerList();
       renderTimeEntries();
