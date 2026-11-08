@@ -2365,6 +2365,28 @@
 
     async function saveOrShareFile(content, filename, mimeType) {
       try {
+        // 1. Använd File System Access API om det finns (Chrome/Edge/Desktop/Android Chrome)
+        if (window.showSaveFilePicker && (!window.Capacitor || !window.Capacitor.isNativePlatform())) {
+          try {
+            const fileExtension = filename.split('.').pop();
+            const handle = await window.showSaveFilePicker({
+              suggestedName: filename,
+              types: [{
+                description: 'Säkerhetskopia / Dokument',
+                accept: { [mimeType]: [`.${fileExtension}`] }
+              }]
+            });
+            const writable = await handle.createWritable();
+            await writable.write(content);
+            await writable.close();
+            alert('Filen har sparats framgångsrikt!');
+            return;
+          } catch (err) {
+            if (err.name === 'AbortError') return;
+            console.warn('showSaveFilePicker avbröts eller stöds inte fullt ut, faller tillbaka...', err);
+          }
+        }
+
         let base64Data = '';
         if (content instanceof ArrayBuffer || ArrayBuffer.isView(content)) {
           const bytes = new Uint8Array(content);
@@ -2390,14 +2412,14 @@
           const savedFile = await filesystem.writeFile({
             path: filename,
             data: base64Data,
-            directory: 'CACHE'
+            directory: 'DOCUMENTS'
           });
 
           await share.share({
             title: filename,
-            text: 'Här är din fil från Tidsrapportering',
+            text: 'Här är din säkerhetskopia från Tidsrapportering',
             url: savedFile.uri,
-            dialogTitle: 'Spara eller dela fil'
+            dialogTitle: 'Spara eller dela säkerhetskopia'
           });
           return;
         }
@@ -2902,11 +2924,10 @@
         return;
       }
 
-      // Bygg månadsväljarens alternativ om månadsvy är vald
       let availableMonths = [];
       entries.forEach(e => {
         if (e.date && e.date.length >= 7) {
-          const ym = e.date.slice(0, 7); // ÅÅÅÅ-MM
+          const ym = e.date.slice(0, 7);
           if (!availableMonths.includes(ym)) availableMonths.push(ym);
         }
       });
@@ -2926,7 +2947,6 @@
         monthFilterContainer.style.display = 'none';
       }
 
-      // Filtrera baserat på visningsläge, månad och kund
       let activeEntries = entries;
       if (viewMode === 'monthly' && monthSelect.value) {
         const selectedYM = monthSelect.value;
@@ -3027,7 +3047,6 @@
         return true;
       });
 
-      // Sortera i stigande datumordning (äldst först, nyast sist)
       filtered.sort((a, b) => new Date(a.date || '') - new Date(b.date || ''));
       return filtered;
     }
