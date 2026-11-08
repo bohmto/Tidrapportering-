@@ -1291,6 +1291,23 @@
       if (updated) {
         localStorage.setItem(getStorageKey('app_time_entries_v5'), JSON.stringify(entries));
       }
+
+      // Rensa bort gamla hårdkodade tidsinlägg från kalenderns egna skiftlagring
+      const sched = getScheduleInfo();
+      if (sched && sched.calendarShifts) {
+        let changed = false;
+        const entryDates = entries.map(e => e.date);
+        Object.keys(sched.calendarShifts).forEach(dateStr => {
+          const s = sched.calendarShifts[dateStr];
+          if (s && (s.isCompleted || entryDates.includes(dateStr))) {
+            delete sched.calendarShifts[dateStr];
+            changed = true;
+          }
+        });
+        if (changed) {
+          localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
+        }
+      }
     }
 
     function addBreakRow(start = '', end = '') {
@@ -1469,7 +1486,7 @@
 
     async function triggerManualSync() {
       const backupObj = {
-        version: "5.18",
+        version: "5.20",
         profileId: activeProfileId,
         exportDate: new Date().toISOString(),
         customers: getCustomers(),
@@ -1482,7 +1499,7 @@
 
     async function selectAndroidBackupFolder() {
       const backupObj = {
-        version: "5.18",
+        version: "5.20",
         profileId: activeProfileId,
         exportDate: new Date().toISOString(),
         customers: getCustomers(),
@@ -1582,36 +1599,6 @@
       }
     }
 
-    function autoSaveEntryToCalendar(entry) {
-      const sched = getScheduleInfo();
-      if (!sched.calendarShifts) sched.calendarShifts = {};
-      const dateStr = entry.date;
-      if (!dateStr) return;
-
-      const customers = getCustomers();
-      const cust = customers.find(c => c.id === entry.customerId);
-      const custName = cust ? cust.name : 'Pass';
-
-      const start = entry.startTime || '08:00';
-      const end = entry.endTime || '17:00';
-      const breaks = entry.breaks || (entry.breakMin ? [{ start: '', end: '', durationMin: entry.breakMin }] : []);
-
-      sched.calendarShifts[dateStr] = {
-        start: start,
-        end: end,
-        breaks: breaks,
-        breakMin: entry.breakMin || 0,
-        note: `${custName}${entry.desc ? ' - ' + entry.desc : ''}`,
-        off: false,
-        busy: false,
-        isCompleted: true
-      };
-
-      localStorage.setItem(getStorageKey('app_schedule_info_v5'), JSON.stringify(sched));
-      renderScheduleCalendar();
-      checkUpcomingShiftNotifications();
-    }
-
     function getWeekNumber(date) {
       const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
       const dayNum = d.getUTCDay() || 7;
@@ -1692,27 +1679,29 @@
         weekCells.forEach(cell => {
           const isToday = cell.dateStr === todayStr;
 
-          let shift = shifts[cell.dateStr];
+          let shift = null;
           let isCompletedWorked = false;
+          const entryForDay = entries.find(e => e.date === cell.dateStr);
 
-          if (showWorked && !cell.otherMonth) {
-            const entryForDay = entries.find(e => e.date === cell.dateStr);
-            if (entryForDay) {
-              const customers = getCustomers();
-              const cust = customers.find(c => c.id === entryForDay.customerId);
-              const custName = cust ? cust.name : 'Pass';
-              shift = {
-                start: entryForDay.startTime || '',
-                end: entryForDay.endTime || '',
-                breaks: entryForDay.breaks || [],
-                breakMin: entryForDay.breakMin || 0,
-                note: `${custName}${entryForDay.desc ? ' - ' + entryForDay.desc : ''}`,
-                off: false,
-                busy: false,
-                displayLabel: custName,
-                isCompleted: true
-              };
-              isCompletedWorked = true;
+          if (showWorked && entryForDay && !cell.otherMonth) {
+            const customers = getCustomers();
+            const cust = customers.find(c => c.id === entryForDay.customerId);
+            const custName = cust ? cust.name : 'Pass';
+            shift = {
+              start: entryForDay.startTime || '',
+              end: entryForDay.endTime || '',
+              breaks: entryForDay.breaks || [],
+              breakMin: entryForDay.breakMin || 0,
+              note: `${custName}${entryForDay.desc ? ' - ' + entryForDay.desc : ''}`,
+              off: false,
+              busy: false,
+              displayLabel: custName,
+              isCompleted: true
+            };
+            isCompletedWorked = true;
+          } else {
+            if (!entryForDay || !showWorked) {
+              shift = shifts[cell.dateStr] || null;
             }
           }
 
@@ -2181,7 +2170,7 @@
 
     function buildBackupObject() {
       return {
-        version: "5.18",
+        version: "5.20",
         profileId: activeProfileId,
         exportDate: new Date().toISOString(),
         customers: getCustomers(),
@@ -2560,7 +2549,6 @@
 
       entries.unshift(newEntry);
       saveTimeEntries(entries);
-      autoSaveEntryToCalendar(newEntry);
 
       setActiveShift(null);
       alert(`Passet avslutat och sparat! (${workedHours} h arbetad tid)`);
@@ -2847,7 +2835,6 @@
       }
 
       saveTimeEntries(entries);
-      if (entryObj) autoSaveEntryToCalendar(entryObj);
       
       resetTimeForm();
       alert('Tidssegment sparat!');
@@ -3314,7 +3301,7 @@
     }
 
     async function exportData() {
-      const backupObj = { version: "5.18", profileId: activeProfileId, customers: getCustomers(), entries: getTimeEntries(), client: getClientInfo(), schedule: getScheduleInfo() };
+      const backupObj = { version: "5.20", profileId: activeProfileId, customers: getCustomers(), entries: getTimeEntries(), client: getClientInfo(), schedule: getScheduleInfo() };
       await saveOrShareFile(JSON.stringify(backupObj, null, 2), `backup_${activeProfileId}.json`, 'application/json');
     }
 
