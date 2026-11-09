@@ -1281,18 +1281,15 @@
         return;
       }
 
-      // Rensa all lokal lagring kopplad till denna profil
       localStorage.removeItem(getStorageKey('app_client_info_v5'));
       localStorage.removeItem(getStorageKey('app_customers_v5'));
       localStorage.removeItem(getStorageKey('app_time_entries_v5'));
       localStorage.removeItem(getStorageKey('app_schedule_info_v5'));
       localStorage.removeItem(getStorageKey('app_active_shift_v5'));
 
-      // Ta bort profilen från listan
       profiles = profiles.filter(p => p.id !== activeProfileId);
       saveAllProfiles(profiles);
 
-      // Välj den första tillgängliga profilen
       switchUserProfile(profiles[0].id);
       alert("Profilen har tagits bort.");
     }
@@ -1323,7 +1320,6 @@
         localStorage.setItem(getStorageKey('app_time_entries_v5'), JSON.stringify(entries));
       }
 
-      // Rensa bort gamla hårdkodade tidsinlägg från kalenderns egna skiftlagring
       const sched = getScheduleInfo();
       if (sched && sched.calendarShifts) {
         let changed = false;
@@ -3109,6 +3105,9 @@
           startTime: startTime,
           endTime: endTime,
           breakMin: entry.breakMin || 0,
+          normalHours: 0,
+          obHours: totalHours,
+          otHours: 0,
           hours: totalHours,
           rate: wkndRate,
           cost: Math.round(totalHours * wkndRate * 100) / 100,
@@ -3124,7 +3123,7 @@
       if (endM < startM) endM += 24 * 60;
       const obStartM = timeToMins("18:00");
 
-      if (!isWk && startM < obStartM && endM > obStartM) {
+      if (!isWk && startM < obStartM && endM > obStartM && customer && customer.ob_enabled) {
         const hoursBefore18 = calculateHoursBetween(startTime, "18:00", entry.breakMin);
         if (hoursBefore18 > 0) {
           rows.push({
@@ -3132,6 +3131,9 @@
             startTime: startTime,
             endTime: "18:00",
             breakMin: entry.breakMin || 0,
+            normalHours: hoursBefore18,
+            obHours: 0,
+            otHours: 0,
             hours: hoursBefore18,
             rate: baseRate,
             cost: Math.round(hoursBefore18 * baseRate * 100) / 100,
@@ -3155,6 +3157,9 @@
             startTime: "18:00",
             endTime: endTime,
             breakMin: hoursBefore18 > 0 ? 0 : (entry.breakMin || 0),
+            normalHours: 0,
+            obHours: hoursAfter18,
+            otHours: 0,
             hours: hoursAfter18,
             rate: obRate,
             cost: Math.round(hoursAfter18 * obRate * 100) / 100,
@@ -3166,11 +3171,13 @@
       } else {
         let effectiveRate = baseRate;
         let projSuffix = "";
+        let isObRow = false;
         if (!isWk && startM >= obStartM && customer && customer.ob_enabled) {
           effectiveRate = customer.ob_rate_type === 'multiplier'
             ? baseRate * (customer.ob_rate_value || 1.5)
             : baseRate + (customer.ob_rate_value || 0);
           projSuffix = " (Vardags-OB)";
+          isObRow = true;
         }
 
         const calc = calculateEntryCost(entry, customer);
@@ -3182,6 +3189,9 @@
           startTime: startTime,
           endTime: endTime,
           breakMin: entry.breakMin || 0,
+          normalHours: isObRow ? 0 : totalH,
+          obHours: isObRow ? totalH : 0,
+          otHours: 0,
           hours: totalH,
           rate: effectiveRate,
           cost: totalCost,
@@ -3209,42 +3219,68 @@
       let minDate = filtered[0].date;
       let maxDate = filtered[filtered.length - 1].date;
 
+      let allSplitRows = [];
+      filtered.forEach(e => {
+        const cust = customers.find(c => c.id === e.customerId);
+        const splitRows = splitEntryForReport(e, cust);
+        splitRows.forEach(sr => allSplitRows.push(sr));
+      });
+
+      const hasOb = allSplitRows.some(r => r.obHours > 0);
+      const hasOt = allSplitRows.some(r => r.otHours > 0);
+
+      let header = ["Datum", "Tid in", "Tid ut", "Rast"];
+      if (hasOb) {
+        header.push("Ordinarie tid", "OB-tid");
+      } else {
+        header.push("Timmar");
+      }
+      if (hasOt) {
+        header.push("Övertid");
+      }
+      header.push("Taxa/tim", "Ersättning", "Projekt", "Kund", "Beskrivning");
+
       let totalHoursSum = 0;
       let totalCostSum = 0;
 
       const tidSheetRows = [
         [`Tidrapport ${clientName}`],
         [],
-        ["Datum", "Tid in", "Tid ut", "Rast", "Timmar", "Taxa/tim", "Ersättning", "Projekt", "Kund", "Beskrivning"]
+        header
       ];
 
-      filtered.forEach(e => {
-        const cust = customers.find(c => c.id === e.customerId);
-        const splitRows = splitEntryForReport(e, cust);
+      allSplitRows.forEach(r => {
+        totalHoursSum += r.hours;
+        totalCostSum += r.cost;
+        const rastHours = Number((r.breakMin / 60).toFixed(2));
 
-        splitRows.forEach(r => {
-          totalHoursSum += r.hours;
-          totalCostSum += r.cost;
-          const rastHours = Number((r.breakMin / 60).toFixed(2));
+        let rowData = [
+          r.date || '',
+          r.startTime || '',
+          r.endTime || '',
+          rastHours > 0 ? rastHours : ''
+        ];
 
-          tidSheetRows.push([
-            r.date || '',
-            r.startTime || '',
-            r.endTime || '',
-            rastHours > 0 ? rastHours : '',
-            r.hours,
-            r.rate,
-            r.cost,
-            r.project,
-            r.customerName,
-            r.desc
-          ]);
-        });
+        if (hasOb) {
+          rowData.push(r.normalHours > 0 ? r.normalHours : '', r.obHours > 0 ? r.obHours : '');
+        } else {
+          rowData.push(r.hours);
+        }
+
+        if (hasOt) {
+          rowData.push(r.otHours > 0 ? r.otHours : '');
+        }
+
+        rowData.push(r.rate, r.cost, r.project, r.customerName, r.desc);
+        tidSheetRows.push(rowData);
       });
 
-      tidSheetRows.push([
-        "Totalt", "", "", "", Number(totalHoursSum.toFixed(2)), "", Number(totalCostSum.toFixed(2)), "", "", ""
-      ]);
+      let totalRow = ["Totalt", "", "", ""];
+      if (hasOb) totalRow.push("", "");
+      else totalRow.push(Number(totalHoursSum.toFixed(2)));
+      if (hasOt) totalRow.push("");
+      totalRow.push("", Number(totalCostSum.toFixed(2)), "", "", "");
+      tidSheetRows.push(totalRow);
 
       const sammRows = [
         [`Tidrapport - Sammanfattning`],
@@ -3307,26 +3343,60 @@
       const client = getClientInfo();
       const clientName = client.name || 'T Nyström Böhm';
 
+      let allSplitRows = [];
+      filtered.forEach(e => {
+        const cust = customers.find(c => c.id === e.customerId);
+        const splitRows = splitEntryForReport(e, cust);
+        splitRows.forEach(sr => allSplitRows.push(sr));
+      });
+
+      const hasOb = allSplitRows.some(r => r.obHours > 0);
+      const hasOt = allSplitRows.some(r => r.otHours > 0);
+
+      let headerCols = ["Datum", "Tid in", "Tid ut", "Rast"];
+      if (hasOb) headerCols.push("Ordinarie tid", "OB-tid");
+      else headerCols.push("Timmar");
+      if (hasOt) headerCols.push("Övertid");
+      headerCols.push("Taxa/tim", "Ersättning", "Projekt", "Kund", "Beskrivning");
+
       let csv = `Tidrapport ${clientName}\n\n`;
-      csv += "Datum;Tid in;Tid ut;Rast;Timmar;Taxa/tim;Ersättning;Projekt;Kund;Beskrivning\n";
+      csv += headerCols.join(";") + "\n";
       
       let totalHoursSum = 0;
       let totalCostSum = 0;
 
-      filtered.forEach(e => {
-        const cust = customers.find(c => c.id === e.customerId);
-        const splitRows = splitEntryForReport(e, cust);
+      allSplitRows.forEach(r => {
+        totalHoursSum += r.hours;
+        totalCostSum += r.cost;
+        const rastHours = Number((r.breakMin / 60).toFixed(2));
 
-        splitRows.forEach(r => {
-          totalHoursSum += r.hours;
-          totalCostSum += r.cost;
-          const rastHours = Number((r.breakMin / 60).toFixed(2));
+        let rowCols = [
+          r.date || '',
+          r.startTime || '',
+          r.endTime || '',
+          rastHours > 0 ? rastHours : ''
+        ];
 
-          csv += `${r.date || ''};${r.startTime || ''};${r.endTime || ''};${rastHours > 0 ? rastHours : ''};${r.hours};${r.rate};${r.cost};"${r.project}";"${r.customerName}";"${r.desc}"\n`;
-        });
+        if (hasOb) {
+          rowCols.push(r.normalHours > 0 ? r.normalHours : '', r.obHours > 0 ? r.obHours : '');
+        } else {
+          rowCols.push(r.hours);
+        }
+
+        if (hasOt) {
+          rowCols.push(r.otHours > 0 ? r.otHours : '');
+        }
+
+        rowCols.push(r.rate, r.cost, `"${r.project}"`, `"${r.customerName}"`, `"${r.desc}"`);
+        csv += rowCols.join(";") + "\n";
       });
 
-      csv += `Totalt;;;;${Number(totalHoursSum.toFixed(2))};;${Number(totalCostSum.toFixed(2))};;;\n`;
+      let totalCols = ["Totalt", "", "", ""];
+      if (hasOb) totalCols.push("", "");
+      else totalCols.push(Number(totalHoursSum.toFixed(2)));
+      if (hasOt) totalCols.push("");
+      totalCols.push("", Number(totalCostSum.toFixed(2)), "", "", "");
+      csv += totalCols.join(";") + "\n";
 
       await saveOrShareFile(csv, `Tidrapport_${clientName}.csv`, 'text/csv;charset=utf-8;');
     }
