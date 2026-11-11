@@ -3078,7 +3078,7 @@
       let endMins = timeToMins(endStr);
       if (endMins < startMins) endMins += 24 * 60;
       let totalMins = (endMins - startMins) - breakMins;
-      return Math.max(0, Number((totalMins / 60).toFixed(2)));
+      return Math.max(0, totalMins / 60);
     }
 
     function splitEntryForReport(entry, customer) {
@@ -3090,7 +3090,9 @@
       const proj = entry.project || "";
       const desc = entry.desc || "";
       const isWk = isWeekend(entry.date);
+      const breakMins = entry.breakMin || 0;
 
+      // 1. Helg-OB hantering
       if (isWk && customer && customer.ob_enabled && customer.ob_weekend_enabled) {
         let wkndRate = baseRate;
         if (customer.ob_weekend_rate_type === 'multiplier') {
@@ -3104,11 +3106,11 @@
           date: entry.date,
           startTime: startTime,
           endTime: endTime,
-          breakMin: entry.breakMin || 0,
+          breakMin: breakMins,
           normalHours: 0,
           obHours: totalHours,
           otHours: 0,
-          hours: totalHours,
+          hours: Number(totalHours.toFixed(2)),
           rate: wkndRate,
           cost: Math.round(totalHours * wkndRate * 100) / 100,
           project: (proj ? proj + " " : "") + "(Helg-OB)",
@@ -3121,81 +3123,139 @@
       const startM = timeToMins(startTime);
       let endM = timeToMins(endTime);
       if (endM < startM) endM += 24 * 60;
-      const obStartM = timeToMins("18:00");
 
-      if (!isWk && startM < obStartM && endM > obStartM && customer && customer.ob_enabled) {
-        const hoursBefore18 = calculateHoursBetween(startTime, "18:00", entry.breakMin);
-        if (hoursBefore18 > 0) {
-          rows.push({
-            date: entry.date,
-            startTime: startTime,
-            endTime: "18:00",
-            breakMin: entry.breakMin || 0,
-            normalHours: hoursBefore18,
-            obHours: 0,
-            otHours: 0,
-            hours: hoursBefore18,
-            rate: baseRate,
-            cost: Math.round(hoursBefore18 * baseRate * 100) / 100,
-            project: proj,
-            customerName: custName,
-            desc: desc
-          });
-        }
-
-        const hoursAfter18 = calculateHoursBetween("18:00", endTime, hoursBefore18 > 0 ? 0 : entry.breakMin);
-        let obRate = baseRate;
-        if (customer && customer.ob_enabled) {
-          obRate = customer.ob_rate_type === 'multiplier' 
-            ? baseRate * (customer.ob_rate_value || 1.5)
-            : baseRate + (customer.ob_rate_value || 0);
-        }
-
-        if (hoursAfter18 > 0) {
-          rows.push({
-            date: entry.date,
-            startTime: "18:00",
-            endTime: endTime,
-            breakMin: hoursBefore18 > 0 ? 0 : (entry.breakMin || 0),
-            normalHours: 0,
-            obHours: hoursAfter18,
-            otHours: 0,
-            hours: hoursAfter18,
-            rate: obRate,
-            cost: Math.round(hoursAfter18 * obRate * 100) / 100,
-            project: (proj ? proj + " " : "") + "(Vardags-OB)",
-            customerName: custName,
-            desc: (desc ? desc + " - " : "") + "OB-tid efter 18:00"
-          });
-        }
-      } else {
-        let effectiveRate = baseRate;
-        let projSuffix = "";
-        let isObRow = false;
-        if (!isWk && startM >= obStartM && customer && customer.ob_enabled) {
-          effectiveRate = customer.ob_rate_type === 'multiplier'
-            ? baseRate * (customer.ob_rate_value || 1.5)
-            : baseRate + (customer.ob_rate_value || 0);
-          projSuffix = " (Vardags-OB)";
-          isObRow = true;
-        }
-
+      // Om OB är inaktiverat för kunden, returnera hela passet som ordinarie tid
+      if (!customer || !customer.ob_enabled) {
         const calc = calculateEntryCost(entry, customer);
-        const totalH = calc.totalHours;
-        const totalCost = (effectiveRate !== baseRate) ? Math.round(totalH * effectiveRate * 100) / 100 : calc.cost;
-
         rows.push({
           date: entry.date,
           startTime: startTime,
           endTime: endTime,
-          breakMin: entry.breakMin || 0,
-          normalHours: isObRow ? 0 : totalH,
-          obHours: isObRow ? totalH : 0,
+          breakMin: breakMins,
+          normalHours: calc.totalHours,
+          obHours: 0,
           otHours: 0,
-          hours: totalH,
-          rate: effectiveRate,
-          cost: totalCost,
-          project: proj + projSuffix,
+          hours: calc.totalHours,
+          rate: baseRate,
+          cost: calc.cost,
+          project: proj,
+          customerName: custName,
+          desc: desc
+        });
+        return rows;
+      }
+
+      // Vardags-OB gränser (t.ex. 06:00 till 18:00 är normalt, 00:00-06:00 och 18:00-24:00 är OB)
+      const obStartStr = customer.ob_start_time || "18:00";
+      const obEndStr = customer.ob_end_time || "06:00";
+      const obStartM = timeToMins(obStartStr); // t.ex. 1080 (18:00)
+      const obEndM = timeToMins(obEndStr);     // t.ex. 360 (06:00)
+
+      // Beräkna OB-satser
+      const obRate = customer.ob_rate_type === 'multiplier' 
+        ? baseRate * (customer.ob_rate_value || 1.5)
+        : baseRate + (customer.ob_rate_value || 0);
+
+      // Dela upp passet i minuter för respektive zon (Morgon-OB, Normal, Kvälls-OB)
+      let morningObMins = 0;
+      let normalMins = 0;
+      let eveningObMins = 0;
+
+      for (let m = startM; m < endM; m++) {
+        const dayMinute = m % 1440;
+        if (dayMinute < obEndM || dayMinute >= obStartM) {
+          if (dayMinute < obEndM) morningObMins++;
+          else eveningObMins++;
+        } else {
+          normalMins++;
+        }
+      }
+
+      // Dra av rasten i första hand från normal tid, därefter OB
+      let remainingBreak = breakMins;
+      let breakOnNormal = Math.min(normalMins, remainingBreak);
+      normalMins -= breakOnNormal;
+      remainingBreak -= breakOnNormal;
+
+      let breakOnMorning = Math.min(morningObMins, remainingBreak);
+      morningObMins -= breakOnMorning;
+      remainingBreak -= breakOnMorning;
+
+      let breakOnEvening = Math.min(eveningObMins, remainingBreak);
+      eveningObMins -= breakOnEvening;
+
+      const morningH = morningObMins / 60;
+      const normalH = normalMins / 60;
+      const eveningH = eveningObMins / 60;
+
+      if (morningH > 0) {
+        rows.push({
+          date: entry.date,
+          startTime: startTime,
+          endTime: obEndStr,
+          breakMin: breakOnMorning,
+          normalHours: 0,
+          obHours: Number(morningH.toFixed(2)),
+          otHours: 0,
+          hours: Number(morningH.toFixed(2)),
+          rate: obRate,
+          cost: Math.round(morningH * obRate * 100) / 100,
+          project: (proj ? proj + " " : "") + "(Morgon-OB)",
+          customerName: custName,
+          desc: (desc ? desc + " - " : "") + `Morgon-OB (${startTime}–${obEndStr})`
+        });
+      }
+
+      if (normalH > 0) {
+        rows.push({
+          date: entry.date,
+          startTime: morningH > 0 ? obEndStr : startTime,
+          endTime: eveningH > 0 ? obStartStr : endTime,
+          breakMin: breakOnNormal,
+          normalHours: Number(normalH.toFixed(2)),
+          obHours: 0,
+          otHours: 0,
+          hours: Number(normalH.toFixed(2)),
+          rate: baseRate,
+          cost: Math.round(normalH * baseRate * 100) / 100,
+          project: proj,
+          customerName: custName,
+          desc: desc
+        });
+      }
+
+      if (eveningH > 0) {
+        rows.push({
+          date: entry.date,
+          startTime: (morningH > 0 || normalH > 0) ? obStartStr : startTime,
+          endTime: endTime,
+          breakMin: breakOnEvening,
+          normalHours: 0,
+          obHours: Number(eveningH.toFixed(2)),
+          otHours: 0,
+          hours: Number(eveningH.toFixed(2)),
+          rate: obRate,
+          cost: Math.round(eveningH * obRate * 100) / 100,
+          project: (proj ? proj + " " : "") + "(Vardags-OB)",
+          customerName: custName,
+          desc: (desc ? desc + " - " : "") + `Kvälls-OB (${obStartStr}–${endTime})`
+        });
+      }
+
+      if (rows.length === 0) {
+        const calc = calculateEntryCost(entry, customer);
+        rows.push({
+          date: entry.date,
+          startTime: startTime,
+          endTime: endTime,
+          breakMin: breakMins,
+          normalHours: calc.totalHours,
+          obHours: 0,
+          otHours: 0,
+          hours: calc.totalHours,
+          rate: baseRate,
+          cost: calc.cost,
+          project: proj,
           customerName: custName,
           desc: desc
         });
