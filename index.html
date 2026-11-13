@@ -2814,7 +2814,7 @@
           subtext.innerText = `Startat kl ${startTimeStr} | Nästa rast senast kl ${latestBreakStr}`;
           topStatusText.innerText = `⏱️ ARBETAR: ${custName} (${clockText}) • Nästa rast senast ${latestBreakStr}`;
           updateAppStatusIndicators(currentShift, clockText);
-          updateBackgroundNotification(`⏱️ Arbetar på ${custName}`, `Startade kl ${startTimeStr} | Nästa rast senast kl ${latestBreakStr}`, true, false, currentShift.startTime);
+          updateBackgroundNotification(`⏱️ ${clockText} - ${custName}`, `Startade kl ${startTimeStr} | Nästa rast senast kl ${latestBreakStr}`, true, false, currentShift.startTime);
         } else if (currentShift.status === 'break') {
           const elapsedBreakMs = Date.now() - currentShift.breakStart;
           const bSec = Math.floor((elapsedBreakMs / 1000) % 60);
@@ -2824,7 +2824,7 @@
           subtext.innerText = `På rast sedan ${new Date(currentShift.breakStart).toTimeString().slice(0,5)} (${breakClockText})`;
           topStatusText.innerText = `☕ RAST: ${custName} (Rast: ${breakClockText})`;
           updateAppStatusIndicators(currentShift, clockText);
-          updateBackgroundNotification(`☕ Rast på ${custName}`, `Rast sedan kl ${new Date(currentShift.breakStart).toTimeString().slice(0,5)}`, true, true, currentShift.breakStart);
+          updateBackgroundNotification(`☕ Rast (${breakClockText}) - ${custName}`, `Rast sedan kl ${new Date(currentShift.breakStart).toTimeString().slice(0,5)}`, true, true, currentShift.breakStart);
         }
       }
 
