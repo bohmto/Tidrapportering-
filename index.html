@@ -456,7 +456,7 @@
       <div class="form-group" id="compliance-toggle-group" style="text-align: left; margin-bottom: 12px;">
         <label style="font-size: 12px; color: #94a3b8; display: flex; align-items: center; gap: 8px;">
           <input type="checkbox" id="enable-transport-rules" checked style="width: auto;">
-          Bevaka Vägarbetstid & Larm (15 min)
+          Bevaka Vägarbetstid & Larm (5,5h)
         </label>
       </div>
 
@@ -2050,6 +2050,8 @@
 
       let reducedDailyCount = 0;
       let lastReducedWeekly = null;
+      let lastWeeklyRestType = null; // 'regular' or 'reduced'
+      let lastWeeklyRestEndTime = null;
 
       for (let i = 0; i < sorted.length - 1; i++) {
         const current = sorted[i];
@@ -2065,8 +2067,12 @@
 
         if (restHours >= 45) {
           reducedDailyCount = 0;
+          lastWeeklyRestType = 'regular';
+          lastWeeklyRestEndTime = nextStart;
         } else if (restHours >= 24 && restHours < 45) {
           reducedDailyCount = 0;
+          lastWeeklyRestType = 'reduced';
+          lastWeeklyRestEndTime = nextStart;
           const compDeadline = new Date(nextStart.getTime() + 21 * 24 * 60 * 60 * 1000);
           lastReducedWeekly = {
             date: current.date,
@@ -2095,6 +2101,32 @@
           <div style="background:#f0fdf4; color:#166534; padding:8px 12px; border-radius:8px; margin-bottom:10px; border:1px solid #bbf7d0; font-size:13px;">
             ✅ Reducerade dygnsvilor förbrukade: <strong>${reducedDailyCount} av 3</strong> tillåtna. 
             (${3 - reducedDailyCount} st kvar innan krav på ordinarie 11h vila).
+          </div>
+        `;
+      }
+
+      let weeklyRestAnalysisHtml = '';
+      if (lastWeeklyRestType === 'reduced') {
+        weeklyRestAnalysisHtml += `
+          <div style="background:#fef3c7; color:#92400e; padding:10px 12px; border-radius:8px; margin-bottom:10px; border:1px solid #fcd34d; font-size:13px; line-height:1.4;">
+            <strong>⚖️ Krav på nästa veckovila:</strong> Eftersom din senaste veckovila var <strong>reducerad (24h–45h)</strong>, 
+            kräver reglerna att nästa veckovila är en <strong>ordinarie veckovila på minst 45 timmar</strong>.
+          </div>
+        `;
+      } else {
+        weeklyRestAnalysisHtml += `
+          <div style="background:#f0fdf4; color:#166534; padding:10px 12px; border-radius:8px; margin-bottom:10px; border:1px solid #bbf7d0; font-size:13px; line-height:1.4;">
+            <strong>⚖️ Krav på nästa veckovila:</strong> Du kan välja mellan ordinarie veckovila (45h) eller reducerad veckovila (minst 24h) härnäst.
+          </div>
+        `;
+      }
+
+      if (lastWeeklyRestEndTime) {
+        const latestWeeklyDeadline = new Date(lastWeeklyRestEndTime.getTime() + 144 * 60 * 60 * 1000);
+        const formatDeadline = (d) => d.toLocaleDateString('sv-SE', { weekday: 'short', month: 'numeric', day: 'numeric' }) + ' kl ' + d.toTimeString().slice(0, 5);
+        weeklyRestAnalysisHtml += `
+          <div style="background:#e0f2fe; color:#0369a1; padding:10px 12px; border-radius:8px; margin-bottom:10px; border:1px solid #bae6fd; font-size:13px; line-height:1.4;">
+            <strong>⏳ Senaste tidpunkt för veckovila:</strong> Enligt 6-dygnsregeln (max 144h mellan veckovilor) måste nästa veckovila påbörjas senast <strong>${formatDeadline(latestWeeklyDeadline)}</strong>.
           </div>
         `;
       }
@@ -2155,6 +2187,7 @@
 
       output.innerHTML = `
         ${warningsHtml}
+        ${weeklyRestAnalysisHtml}
         ${nextAllowedStartText}
         <p style="margin-top:0; margin-bottom:6px;"><strong>📊 Vägarbetstid denna vecka:</strong></p>
         <ul style="padding-left: 20px; margin: 0;">
@@ -2732,32 +2765,27 @@
         const periodWorkedMs = Date.now() - periodStart - (currentShift.status === 'break' ? (Date.now() - currentShift.breakStart) : 0);
         const periodWorkedHours = Math.max(0, periodWorkedMs) / (1000 * 60 * 60);
 
-        const latestNextBreakTime = new Date(periodStart + 4 * 3600 * 1000);
-        const firstBreakStr = latestNextBreakTime.toTimeString().slice(0, 5);
+        const latestNextBreakTime = new Date(periodStart + 6 * 3600 * 1000);
+        const latestBreakStr = latestNextBreakTime.toTimeString().slice(0, 5);
 
         const enableRules = document.getElementById('enable-transport-rules')?.checked;
         if (enableRules) {
           complianceBox.style.display = 'block';
 
           const workedHours = currentWorkedMs / (1000 * 60 * 60);
-          const totalBreakMins = Math.round((currentShift.breakTimeMs + (currentShift.status === 'break' ? (Date.now() - currentShift.breakStart) : 0)) / (1000 * 60));
 
           if (currentShift.status === 'working') {
-            if (periodWorkedHours >= 4.0 && periodWorkedHours < 4.1 && !alarmStateMap['notified_4h']) {
-              alarmStateMap['notified_4h'] = true;
-              showNotification("⚠️ Rastvarning (Ny period)", "Du har arbetat 4 timmar sedan senaste rasten. Planera in rast inom kort.");
-            }
             if (periodWorkedHours >= 5.5 && periodWorkedHours < 5.6 && !alarmStateMap['notified_5.5h']) {
               alarmStateMap['notified_5.5h'] = true;
-              showNotification("🚨 VIKTIGT: Vägarbetstidslagen", "Sista chansen att ta rast – mindre än 30 minuter kvar till 6-timmarsgränsen för denna period!");
+              showNotification("⚠️ Rastvarning (Vägarbetstidslagen)", "Du har arbetat 5,5 timmar i denna period. Sista chansen att ta rast – mindre än 30 minuter kvar till 6-timmarsgränsen!");
             }
           }
 
           let nextBreakInfo = '';
-          if (periodWorkedHours < 4.0) {
-            nextBreakInfo = `<strong>Nästa rast (Period):</strong> Senast kl <strong>${firstBreakStr}</strong> (ca ${(4 - periodWorkedHours).toFixed(1)}h kvar till 4h-gräns).`;
+          if (periodWorkedHours < 5.5) {
+            nextBreakInfo = `<strong>Nästa rast (Period):</strong> Senast kl <strong>${latestBreakStr}</strong> (ca ${(6 - periodWorkedHours).toFixed(1)}h kvar till 6h-gränsen, varna vid 5,5h).`;
           } else {
-            nextBreakInfo = `⚠️ Du har passerat 4 timmar i denna period utan rast! Ta rast snarast (max 6h).`;
+            nextBreakInfo = `🚨 Du har arbetat över 5,5 timmar i denna period! Ta rast snarast (absolut senast vid 6 timmar).`;
           }
 
           let shiftLimitWarning = '';
@@ -2770,7 +2798,7 @@
               ⚠️ VARNING: Passet har pågått i över 12 timmar. Kontrollera gällande dispens eller kollektivavtal för max passlängd.
             </div>`;
           } else if (periodWorkedHours >= 5.75) {
-            shiftLimitWarning = `<div style="color: #ef4444; font-weight: bold; margin-top: 4px;">⚠️ Varning: 6 timmars gräns i denna period närmar sig!</div>`;
+            shiftLimitWarning = `<div style="color: #ef4444; font-weight: bold; margin-top: 4px;">⚠️ Varning: 6 timmars gräns för perioden nås alldeles strax!</div>`;
           }
 
           complianceBox.innerHTML = `
@@ -2783,10 +2811,10 @@
         }
 
         if (currentShift.status === 'working') {
-          subtext.innerText = `Startat kl ${startTimeStr} | Nästa rast senast kl ${firstBreakStr}`;
-          topStatusText.innerText = `⏱️ ARBETAR: ${custName} (${clockText}) • Nästa rast senast ${firstBreakStr}`;
+          subtext.innerText = `Startat kl ${startTimeStr} | Nästa rast senast kl ${latestBreakStr}`;
+          topStatusText.innerText = `⏱️ ARBETAR: ${custName} (${clockText}) • Nästa rast senast ${latestBreakStr}`;
           updateAppStatusIndicators(currentShift, clockText);
-          updateBackgroundNotification(`⏱️ Arbetar på ${custName}`, `Startade kl ${startTimeStr} | Nästa rast senast kl ${firstBreakStr}`, true, false, currentShift.startTime);
+          updateBackgroundNotification(`⏱️ Arbetar på ${custName}`, `Startade kl ${startTimeStr} | Nästa rast senast kl ${latestBreakStr}`, true, false, currentShift.startTime);
         } else if (currentShift.status === 'break') {
           const elapsedBreakMs = Date.now() - currentShift.breakStart;
           const bSec = Math.floor((elapsedBreakMs / 1000) % 60);
@@ -3092,7 +3120,6 @@
       const isWk = isWeekend(entry.date);
       const breakMins = entry.breakMin || 0;
 
-      // 1. Helg-OB hantering
       if (isWk && customer && customer.ob_enabled && customer.ob_weekend_enabled) {
         let wkndRate = baseRate;
         if (customer.ob_weekend_rate_type === 'multiplier') {
@@ -3124,7 +3151,6 @@
       let endM = timeToMins(endTime);
       if (endM < startM) endM += 24 * 60;
 
-      // Om OB är inaktiverat för kunden, returnera hela passet som ordinarie tid
       if (!customer || !customer.ob_enabled) {
         const calc = calculateEntryCost(entry, customer);
         rows.push({
@@ -3145,18 +3171,15 @@
         return rows;
       }
 
-      // Vardags-OB gränser (t.ex. 06:00 till 18:00 är normalt, 00:00-06:00 och 18:00-24:00 är OB)
       const obStartStr = customer.ob_start_time || "18:00";
       const obEndStr = customer.ob_end_time || "06:00";
-      const obStartM = timeToMins(obStartStr); // t.ex. 1080 (18:00)
-      const obEndM = timeToMins(obEndStr);     // t.ex. 360 (06:00)
+      const obStartM = timeToMins(obStartStr);
+      const obEndM = timeToMins(obEndStr);
 
-      // Beräkna OB-satser
       const obRate = customer.ob_rate_type === 'multiplier' 
         ? baseRate * (customer.ob_rate_value || 1.5)
         : baseRate + (customer.ob_rate_value || 0);
 
-      // Dela upp passet i minuter för respektive zon (Morgon-OB, Normal, Kvälls-OB)
       let morningObMins = 0;
       let normalMins = 0;
       let eveningObMins = 0;
@@ -3171,7 +3194,6 @@
         }
       }
 
-      // Dra av rasten i första hand från normal tid, därefter OB
       let remainingBreak = breakMins;
       let breakOnNormal = Math.min(normalMins, remainingBreak);
       normalMins -= breakOnNormal;
